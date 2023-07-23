@@ -1,0 +1,2 @@
+~/Applications/Slicer.app/Contents/MacOS/Slicer --no-splash --no-main-window --python-script preprocessing/data_conversion.py --input-folder ~/Developer/School/DP/data/VS-dicom-tmp/ --output-folder ~/Developer/School/DP/data/VS-nii/ --register T2 --export_all_structures
+~/Applications/Slicer.app/Contents/MacOS/Slicer --no-splash --no-main-window --python-script preprocessing/data_conversion.py --input-folder ~/Developer/School/DP/data/VS-dicom-tmp/ --output-folder ~/Developer/School/DP/data/VS-nii/ --register T2

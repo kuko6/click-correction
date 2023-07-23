@@ -1,0 +1,25 @@
+version: '3.6' 
+services:
+    orthanc:
+        image: osimis/orthanc
+        restart: unless-stopped
+        ports:
+            - 4242:4242
+            - 8042:8042
+        environment:
+            ORTHANC__NAME: 'Orthanc for OHIF'
+
+            DICOM_WEB_PLUGIN_ENABLED: 'true'
+
+            ORTHANC__ORTHANC_EXPLORER_2__UI_OPTIONS__ENABLE_OPEN_IN_OHIF_VIEWER: 'true'
+
+            ORTHANC__DICOM_WEB__ENABLE: 'true'
+            ORTHANC__DICOM_WEB__ROOT: '/dicom-web/'
+            ORTHANC__DICOM_WEB__SERVERS: '{"sample": [ "http://localhost:8042/dicom-web/"]}'
+
+            VERBOSE_STARTUP: 'true'
+        volumes:
+            - orthanc-data:/var/lib/orthanc/db/
+
+volumes:
+    orthanc-data:

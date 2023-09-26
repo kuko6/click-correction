@@ -3,4 +3,6 @@
 .python-version
 
 outputs/
+training_outputs/
 data/
+wandb/

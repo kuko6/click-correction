@@ -8,11 +8,11 @@ dependencies:
   - pip:
       - azureml-core
       - wandb
-      - nibabel==5.1.0
-      - opencv-python==4.8.0.76
-      - torch==2.0.1
-      - torchinfo==1.8.0
-      - matplotlib==3.7.1
-      - numpy==1.25.2
-      - scikit-learn==1.2.2
-      - scipy==1.11.1
+      - nibabel~=5.1.0
+      - opencv-python~=4.8.0.76
+      - torch~=2.1.0
+      - torchinfo~=1.8.0
+      - matplotlib~=3.7.1
+      - numpy~=1.25.2
+      - scikit-learn~=1.2.2
+      - scipy~=1.11.1

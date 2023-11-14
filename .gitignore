@@ -1,8 +1,11 @@
 .ipynb_checkpoints
 .DS_Store
 .python-version
+.env
 
 outputs/
 training_outputs/
 data/
 wandb/
+
+config*.json

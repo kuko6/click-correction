@@ -15,10 +15,8 @@ from torchinfo import summary
 from model import Unet
 from data_generator import MRIDataset, get_glioma_indices
 
-from losses.tversky import TverskyLoss
 from losses.dice import dice_coefficient, DiceLoss, DiceBCELoss
-from losses.focal import FocalLoss
-from losses.focal_tversky import FocalTverskyLoss
+from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss
 
 # print(sys.version_info)
 # print(torch.__version__)
@@ -27,10 +25,10 @@ from losses.focal_tversky import FocalTverskyLoss
 # print(torch.backends.cudnn.is_available())
 # print(torch.cuda.is_available())
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f'Using {device} device')
+DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f'Using {DEVICE} device')
 
-config = {
+CONFIG = {
     "lr": 1e-3,
     "num_classes": 1,
     "img_channels": 2,
@@ -43,10 +41,12 @@ config = {
     "scheduler": False,
 }
 
-use_wandb = False
+USE_WANDB = False
 
 
-def prepare_data(data_dir):
+def prepare_data(data_dir: str) -> MRIDataset:
+    """ Loads the data from `data_dir` and returns `Dataset` """
+
     t1_list = sorted(glob.glob(os.path.join(data_dir, 'VS-*-*/vs_*/*_t1_*')))
     t2_list = sorted(glob.glob(os.path.join(data_dir, 'VS-*-*/vs_*/*_t2_*')))
     seg_list = sorted(glob.glob(os.path.join(data_dir, 'VS-*-*/vs_*/*_seg_*')))
@@ -59,13 +59,16 @@ def prepare_data(data_dir):
     print(len(t1_train), len(t2_train), len(seg_train))
     print(len(t1_val), len(t2_val), len(seg_val))
 
-    train_dataloader = DataLoader(train_data, batch_size=config['batch_size'], shuffle=True)
-    val_dataloader = DataLoader(val_data, batch_size=config['batch_size'], shuffle=False)
+    train_dataloader = DataLoader(train_data, batch_size=CONFIG['batch_size'], shuffle=True)
+    val_dataloader = DataLoader(val_data, batch_size=CONFIG['batch_size'], shuffle=False)
 
     return train_dataloader, val_dataloader
 
 
-def preview(y_pred, y, dice, epoch=0):
+def preview(y_pred: torch.Tensor, y: torch.Tensor, dice: torch.Tensor, epoch=0):
+    """ Saves a png of sample prediction `y_pred` for scan `y` """
+
+    # Compute number of slices with the tumour
     first, last = get_glioma_indices(y)
     length = (last-first+1)
     n_graphs = (length*2)//6
@@ -73,6 +76,7 @@ def preview(y_pred, y, dice, epoch=0):
     cols = 6
     res = cols if cols > rows else rows
 
+    # Plot them
     fig, axs = plt.subplots(rows, cols, figsize=(res*2, res*2))
     axs = axs.flatten()
     j = 0
@@ -92,13 +96,14 @@ def preview(y_pred, y, dice, epoch=0):
     plt.close(fig)
 
 
-def val(dataloader, model, loss_fn, epoch):
+def val(dataloader: DataLoader, model: Unet, loss_fn: torch.nn.Module, epoch: int) -> tuple[float, float]:
+    """ Validate model after each epoch on validation dataset, returns the avg. loss and avg. dice """
+    
     model.eval()
     avg_loss, avg_dice = 0, 0
-    # out = display(IPython.display.Pretty('starting...'), display_id=True)
     with torch.no_grad():
         for i, (x, y) in enumerate(dataloader):
-            x, y = x.to(device), y.to(device)
+            x, y = x.to(DEVICE), y.to(DEVICE)
             y_pred = model(x)
 
             # avg_loss += loss_fn(y_pred, y).item()
@@ -112,7 +117,6 @@ def val(dataloader, model, loss_fn, epoch):
             dice = dice_coefficient(y_pred, y).item()
             avg_dice += dice
 
-            # out.update(IPython.display.Pretty(f'validation step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice}'))
             print(f'validation step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice}', end='\r')
 
             if i==0:
@@ -125,14 +129,14 @@ def val(dataloader, model, loss_fn, epoch):
     return (avg_loss, avg_dice)
 
 
-def train_one_epoch(dataloader, model, loss_fn, optimizer):
+def train_one_epoch(dataloader: DataLoader, model: Unet, loss_fn, optimizer) -> tuple[float, float]:
+  """ Train model for one epoch on the training dataset, returns the avg. loss and avg. dice """
+
   model.train()
   avg_loss, avg_dice = 0, 0
 
-  # out = display(IPython.display.Pretty(f'Epoch: {epoch}'), display_id=True)
-  # out = display(IPython.display.Pretty('starting...'), display_id=True)
   for i, (x, y) in enumerate(dataloader):
-    x, y = x.to(device), y.to(device)
+    x, y = x.to(DEVICE), y.to(DEVICE)
 
     # print(x.shape, y.shape)
     # print(x.dtype, y.dtype)
@@ -155,7 +159,6 @@ def train_one_epoch(dataloader, model, loss_fn, optimizer):
     loss.backward()
     optimizer.step()
 
-    # out.update(IPython.display.Pretty(f'training step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice}'))
     print(f'training step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice}', end='\r')
 
   avg_loss /= len(dataloader)
@@ -165,8 +168,10 @@ def train_one_epoch(dataloader, model, loss_fn, optimizer):
   return (avg_loss, avg_dice)
 
 
-def train(train_dataloader, val_dataloader, model, loss_fn, optimizer):
-    epochs = config['epochs']
+def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet, loss_fn, optimizer):
+    """ Run the training """
+    
+    epochs = CONFIG['epochs']
     train_history = {'loss': [], 'dice': []}
     val_history = {'loss': [], 'dice': []}
 
@@ -195,7 +200,7 @@ def train(train_dataloader, val_dataloader, model, loss_fn, optimizer):
             'epoch': epoch, 'model_state': model.state_dict(), 'optimizer_state': optimizer.state_dict()
         }, 'outputs/checkpoint.pt')
 
-        if use_wandb:
+        if USE_WANDB:
             wandb.log({
                 'epoch': epoch, 'loss': train_loss, 'dice': train_dice, 
                 'val_loss':val_loss, 'val_dice': val_dice, 'lr': optimizer.param_groups[0]["lr"]
@@ -206,11 +211,12 @@ def train(train_dataloader, val_dataloader, model, loss_fn, optimizer):
         # artifact.add_file('../outputs/checkpoint.pt')
         # wandb.run.log_artifact(artifact)
     
-    if use_wandb:
+    if USE_WANDB:
         wandb.finish()
 
 
 def main():
+    # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-path', type=str, help='path to data')
     # parser.add_argument('--wandb', type=str, help='wandb id')
@@ -223,12 +229,18 @@ def main():
 
     data_dir = args.data_path
     print(os.listdir(data_dir))
+    
+    if not os.path.isdir('outputs'):
+        os.mkdir('outputs')
 
+    # Prepare Datasets
     train_dataloader, val_dataloader = prepare_data(data_dir)
 
-    model = Unet().to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'])
+    # Initialize model and optimizer
+    model = Unet().to(DEVICE)
+    optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['lr'])
 
+    # Select loss function
     classes = {0: 64115061, 1: 396939}
     total_pixels = classes[0] + classes[1]
     # weight = torch.tensor(total_pixels/classes[0]).to(device)
@@ -240,9 +252,7 @@ def main():
     # loss_fn = TverskyLoss(alpha=.3, beta=.7)
     loss_fn = FocalTverskyLoss(alpha=.3, beta=.7)
 
-    if not os.path.isdir('outputs'):
-        os.mkdir('outputs')
-
+    # Train :D
     train(train_dataloader, val_dataloader, model, loss_fn, optimizer)
 
 

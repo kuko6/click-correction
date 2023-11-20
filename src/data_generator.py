@@ -10,25 +10,33 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 
 
-def get_glioma_indices(mask):
-  first = torch.nonzero((mask == 1))[:,1][0].item()
-  last = torch.nonzero((mask == 1))[:,1][-1].item()
+def get_glioma_indices(mask: torch.Tensor) -> tuple[int, int]:
+    """ Returns the first and last slice indices of the tumour in given mask """
 
-  return first, last
+    first = torch.nonzero((mask == 1))[:,1][0].item()
+    last = torch.nonzero((mask == 1))[:,1][-1].item()
+
+    return first, last
 
 
-# https://arxiv.org/abs/2011.01045
-# https://github.com/lescientifik/open_brats2020/tree/main
-def normalize(image):
-    """ Basic min max scaler. """
+def min_max_normalise(image: torch.Tensor) -> torch.Tensor:
+    """ 
+    Basic min max scaler. \n
+    https://arxiv.org/abs/2011.01045
+    https://github.com/lescientifik/open_brats2020/tree/main
+    """
+
     min_ = torch.min(image)
     max_ = torch.max(image)
     scale = max_ - min_
     image = (image - min_) / scale
+    
     return image
 
 
 class MRIDataset(Dataset):
+    """ Torch Dataset which returns the stacked sequences and encoded mask. """
+    
     def __init__(self, t1_list, t2_list, seg_list, img_dims):
         self.t1_list = t1_list
         self.t2_list = t2_list
@@ -38,78 +46,82 @@ class MRIDataset(Dataset):
     def __len__(self):
       return len(self.t1_list)
 
-    def _get_glioma_indices(self, mask):
-      first = torch.nonzero((mask == 1))[:,0][0].item()
-      last = torch.nonzero((mask == 1))[:,0][-1].item()
+    def _get_new_depth(self, mask: torch.Tensor):
+        """ Calculates new depth based on the position of the tumour """
+        
+        first, last = get_glioma_indices(mask)
+        # range_length = last - first + 1
 
-      return first, last
+        # compute the desired padding size on both sides
+        # padding_size = self.img_dims[0] - range_length
+        # padding_size_left = math.floor(padding_size / 2)
+        # padding_size_right = math.ceil(padding_size / 2)
 
-    def _crop_depth(self, mask):
-      first, last = self._get_glioma_indices(mask)
-      range_length = last - first + 1
+        # compute the new start and end indices of the cropped depth dimension
+        mid_index = (first + last) // 2
+        start_index = max(mid_index - math.floor(self.img_dims[0] / 2), 0)
+        end_index = min(start_index + self.img_dims[0], mask.shape[0])
 
-      # print(f'old indices: {first}, {last} : {first - last}')
+        return start_index, end_index
+    
+    def _normalise(self, volume: torch.Tensor) -> torch.Tensor:    
+        """ Normalise given volume """
+        # mean = torch.mean(volume, dim=(0, 1, 2), keepdim=True)
+        # sd = torch.std(volume, dim=(0, 1, 2), keepdim=True)
+        # return (volume - mean) / sd
+        # return irm_min_max_preprocess(volume)
+        
+        return min_max_normalise(volume)
 
-      # compute the desired padding size on both sides
-      padding_size = self.img_dims[0] - range_length
-      padding_size_left = math.floor(padding_size / 2)
-      padding_size_right = math.ceil(padding_size / 2)
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Load the data and run the whole preprocessing pipeline. \n
+        Returns the stacked sequences and encoded mask.
+        """
+        
+        # Load the data
+        t1 = torch.as_tensor(nib.load(self.t1_list[idx]).get_fdata(), dtype=torch.float32).permute(2, 0, 1)
+        t2 = torch.as_tensor(nib.load(self.t2_list[idx]).get_fdata(), dtype=torch.float32).permute(2, 0, 1)
+        seg = torch.as_tensor(nib.load(self.seg_list[idx]).get_fdata(), dtype=torch.float32).permute(2, 0, 1)
+        # print('old shapes: ', t1.shape, t2.shape, seg.shape)
 
-      # compute the new start and end indices of the cropped depth dimension
-      mid_index = (first + last) // 2
-      start_index = max(mid_index - math.floor(self.img_dims[0] / 2), 0)
-      end_index = min(start_index + self.img_dims[0], mask.shape[0])
+        # Crop the image 
+        t1 = TF.center_crop(t1, (self.img_dims[1]*2, self.img_dims[2]*2))
+        t2 = TF.center_crop(t2, (self.img_dims[1]*2, self.img_dims[2]*2))
+        seg = TF.center_crop(seg, (self.img_dims[1]*2, self.img_dims[2]*2))
 
-      # crop the volume along the depth dimension
-      # cropped_volume = volume[start_index:end_index,:,:]
+        # Crop the depth of the volumes when they have bigger depth than required
+        if t1.shape[0] > self.img_dims[0]:
+            start_index, end_index = self._get_new_depth(seg)
+            t1 = t1[start_index:end_index,:,:]
+            t2 = t2[start_index:end_index,:,:]
+            seg = seg[start_index:end_index,:,:]
+            # print(t1.shape[0], t2.shape[0], seg.shape[0])
 
-      return start_index, end_index
+            # first, last = self._get_glioma_indices(seg)
+            # print(f'new indices: {first}, {last} : {first - last}')
+        
+        # When the depth is smaller than required fill the difference with zeros     
+        elif t1.shape[0] < self.img_dims[0]:
+            pad = (0, 0, 0, 0, (self.img_dims[0]-t1.shape[0])//2, (self.img_dims[0]-t1.shape[0])//2)
+            t1 = F.pad(t1, pad, "constant", 0)
+            t2 = F.pad(t2, pad, "constant", 0)
+            seg = F.pad(seg, pad, "constant", 0)
+            # print(t1.shape[0], t2.shape[0], seg.shape[0])
 
-    def _normalise(self, volume):
-      # mean = torch.mean(volume, dim=(0, 1, 2), keepdim=True)
-      # sd = torch.std(volume, dim=(0, 1, 2), keepdim=True)
-      # return (volume - mean) / sd
-      # return irm_min_max_preprocess(volume)
-      return normalize(volume)
+        # Resizing to required width/height 
+        t1 = TF.resize(t1, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)
+        t2 = TF.resize(t2, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)
+        seg = TF.resize(seg, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)
 
-    def __getitem__(self, idx):
-      t1 = torch.as_tensor(nib.load(self.t1_list[idx]).get_fdata(), dtype=torch.float32).permute(2, 0, 1)
-      t2 = torch.as_tensor(nib.load(self.t2_list[idx]).get_fdata(), dtype=torch.float32).permute(2, 0, 1)
-      seg = torch.as_tensor(nib.load(self.seg_list[idx]).get_fdata(), dtype=torch.float32).permute(2, 0, 1)
-      # print('old shapes: ', t1.shape, t2.shape, seg.shape)
+        # Normalisation
+        t1 = self._normalise(t1)
+        t2 = self._normalise(t2)
 
-      t1 = TF.center_crop(t1, (self.img_dims[1]*2, self.img_dims[2]*2))
-      t2 = TF.center_crop(t2, (self.img_dims[1]*2, self.img_dims[2]*2))
-      seg = TF.center_crop(seg, (self.img_dims[1]*2, self.img_dims[2]*2))
+        stacked = torch.stack((t1, t2), axis=0)
+        seg = seg.unsqueeze(0)
 
-      if t1.shape[0] > self.img_dims[0]:
-        start_index, end_index = self._crop_depth(seg)
-        t1 = t1[start_index:end_index,:,:]
-        t2 = t2[start_index:end_index,:,:]
-        seg = seg[start_index:end_index,:,:]
-        # print(t1.shape[0], t2.shape[0], seg.shape[0])
-
-        # first, last = self._get_glioma_indices(seg)
-        # print(f'new indices: {first}, {last} : {first - last}')
-
-      elif t1.shape[0] < self.img_dims[0]:
-        pad = (0, 0, 0, 0, (self.img_dims[0]-t1.shape[0])//2, (self.img_dims[0]-t1.shape[0])//2)
-        t1 = F.pad(t1, pad, "constant", 0)
-        t2 = F.pad(t2, pad, "constant", 0)
-        seg = F.pad(seg, pad, "constant", 0)
-        # print(t1.shape[0], t2.shape[0], seg.shape[0])
-
-      t1 = TF.resize(t1, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)
-      t2 = TF.resize(t2, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)
-      seg = TF.resize(seg, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)
-
-      t1 = self._normalise(t1)
-      t2 = self._normalise(t2)
-
-      stacked = torch.stack((t1, t2), axis=0)
-      seg = seg.unsqueeze(0)
-
-      return stacked, seg
+        return stacked, seg
     
 
 if __name__ == '__main__':

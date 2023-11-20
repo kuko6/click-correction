@@ -4,7 +4,6 @@ import os
 import glob
 import wandb
 import json
-import time
 
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
@@ -14,7 +13,7 @@ from torchinfo import summary
 
 from model import Unet
 from data_generator import MRIDataset
-from utils import get_glioma_indices
+from utils import get_glioma_indices, EarlyStopper
 
 from losses.dice import dice_coefficient, DiceLoss, DiceBCELoss
 from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss
@@ -26,24 +25,23 @@ from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss
 # print(torch.backends.cudnn.is_available())
 # print(torch.cuda.is_available())
 
-DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f'Using {DEVICE} device')
+use_wandb = True
 
-CONFIG = {
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f'Using {device} device')
+
+config = {
     "lr": 1e-3,
     "num_classes": 1,
     "img_channels": 2,
-    "dataset": "Schwanoma",
-    "epochs": 6,
+    "dataset": "Schwannoma",
+    "epochs": 50,
     "batch_size": 2,
     "loss": "focaltversky", 
     "optimizer": "Adam",
     "augment": False,
-    "scheduler": False,
+    "scheduler": True,
 }
-
-USE_WANDB = False
-
 
 def prepare_data(data_dir: str) -> MRIDataset:
     """ Loads the data from `data_dir` and returns `Dataset` """
@@ -60,8 +58,8 @@ def prepare_data(data_dir: str) -> MRIDataset:
     print(len(t1_train), len(t2_train), len(seg_train))
     print(len(t1_val), len(t2_val), len(seg_val))
 
-    train_dataloader = DataLoader(train_data, batch_size=CONFIG['batch_size'], shuffle=True)
-    val_dataloader = DataLoader(val_data, batch_size=CONFIG['batch_size'], shuffle=False)
+    train_dataloader = DataLoader(train_data, batch_size=config['batch_size'], shuffle=True)
+    val_dataloader = DataLoader(val_data, batch_size=config['batch_size'], shuffle=False)
 
     return train_dataloader, val_dataloader
 
@@ -104,7 +102,7 @@ def val(dataloader: DataLoader, model: Unet, loss_fn: torch.nn.Module, epoch: in
     avg_loss, avg_dice = 0, 0
     with torch.no_grad():
         for i, (x, y) in enumerate(dataloader):
-            x, y = x.to(DEVICE), y.to(DEVICE)
+            x, y = x.to(device), y.to(device)
             y_pred = model(x)
 
             # avg_loss += loss_fn(y_pred, y).item()
@@ -137,7 +135,7 @@ def train_one_epoch(dataloader: DataLoader, model: Unet, loss_fn, optimizer) -> 
   avg_loss, avg_dice = 0, 0
 
   for i, (x, y) in enumerate(dataloader):
-    x, y = x.to(DEVICE), y.to(DEVICE)
+    x, y = x.to(device), y.to(device)
 
     # print(x.shape, y.shape)
     # print(x.dtype, y.dtype)
@@ -169,12 +167,14 @@ def train_one_epoch(dataloader: DataLoader, model: Unet, loss_fn, optimizer) -> 
   return (avg_loss, avg_dice)
 
 
-def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet, loss_fn, optimizer):
+def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet, loss_fn, optimizer, scheduler):
     """ Run the training """
     
-    epochs = CONFIG['epochs']
+    epochs = config['epochs']
     train_history = {'loss': [], 'dice': []}
     val_history = {'loss': [], 'dice': []}
+
+    early_stopper = EarlyStopper(patience=5, delta=0, mode='min')
 
     for epoch in range(epochs):
         print('-------------------------------')
@@ -189,6 +189,9 @@ def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet,
         val_history['loss'].append(val_loss)
         val_history['dice'].append(val_dice)
 
+        if config['scheduler']:
+            scheduler.step(val_loss)
+
         print(f'loss: {train_loss:>5f} dice: {train_dice:>5f}')
         print(f'val loss: {val_loss:>5f} val dice: {val_dice:>5f}')
 
@@ -201,18 +204,23 @@ def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet,
             'epoch': epoch, 'model_state': model.state_dict(), 'optimizer_state': optimizer.state_dict()
         }, 'outputs/checkpoint.pt')
 
-        if USE_WANDB:
+        if use_wandb:
             wandb.log({
                 'epoch': epoch, 'loss': train_loss, 'dice': train_dice, 
                 'val_loss':val_loss, 'val_dice': val_dice, 'lr': optimizer.param_groups[0]["lr"]
             })
             wandb.log({'preview': wandb.Image(f'outputs/{epoch}_preview.png')})
-        
+
         # artifact = wandb.Artifact('checkpoint', type='model', metadata={'val_dice': val_dice})
         # artifact.add_file('../outputs/checkpoint.pt')
         # wandb.run.log_artifact(artifact)
+        
+        if early_stopper(val_loss):
+            print('Stopping early!!!')
+            break
+        
     
-    if USE_WANDB:
+    if use_wandb:
         wandb.finish()
 
 
@@ -220,13 +228,18 @@ def main():
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-path', type=str, help='path to data')
-    # parser.add_argument('--wandb', type=str, help='wandb id')
+    parser.add_argument('--wandb', type=str, help='wandb id')
     
     args = parser.parse_args()
     # print(args.wandb)
 
     if not args.data_path:
         print('You need to specify datapath!!!! >:(')
+
+    wandb_key = args.wandb
+    if use_wandb:
+        wandb.login(key=wandb_key)
+        wandb.init(project='DP', entity='kuko', reinit=True, config=config)    
 
     data_dir = args.data_path
     print(os.listdir(data_dir))
@@ -238,8 +251,9 @@ def main():
     train_dataloader, val_dataloader = prepare_data(data_dir)
 
     # Initialize model and optimizer
-    model = Unet().to(DEVICE)
-    optimizer = torch.optim.Adam(model.parameters(), lr=CONFIG['lr'])
+    model = Unet().to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'])
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.1)
 
     # Select loss function
     classes = {0: 64115061, 1: 396939}
@@ -254,14 +268,9 @@ def main():
     loss_fn = FocalTverskyLoss(alpha=.3, beta=.7)
 
     # Train :D
-    train(train_dataloader, val_dataloader, model, loss_fn, optimizer)
+    train(train_dataloader, val_dataloader, model, loss_fn, optimizer, scheduler)
 
 
-if __name__ == '__main__':
-    start_time = time.time()
-
+if __name__ == '__main__': 
     main()
-
-    end_time = time.time()
-    print(f'{end_time - start_time}s')
     

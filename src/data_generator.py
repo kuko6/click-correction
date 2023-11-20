@@ -12,7 +12,7 @@ import torchvision.transforms.functional as TF
 
 def min_max_normalise(image: torch.Tensor) -> torch.Tensor:
     """ 
-    Basic min max scaler. \n
+    Basic min-max scaler. \n
     https://arxiv.org/abs/2011.01045
     https://github.com/lescientifik/open_brats2020/tree/main
     """
@@ -49,12 +49,6 @@ class MRIDataset(Dataset):
         """ Calculates new depth based on the position of the tumour """
         
         first, last = self._get_glioma_indices(mask)
-        # range_length = last - first + 1
-
-        # compute the desired padding size on both sides
-        # padding_size = self.img_dims[0] - range_length
-        # padding_size_left = math.floor(padding_size / 2)
-        # padding_size_right = math.ceil(padding_size / 2)
 
         # compute the new start and end indices of the cropped depth dimension
         mid_index = (first + last) // 2
@@ -84,8 +78,6 @@ class MRIDataset(Dataset):
         seg = torch.as_tensor(nib.load(self.seg_list[idx]).get_fdata(), dtype=torch.float32).permute(2, 0, 1)
         # print('old shapes: ', t1.shape, t2.shape, seg.shape)
 
-        print(t1.shape)
-
         # Crop the image 
         t1 = TF.center_crop(t1, (self.img_dims[1]*2, self.img_dims[2]*2))
         t2 = TF.center_crop(t2, (self.img_dims[1]*2, self.img_dims[2]*2))
@@ -109,10 +101,6 @@ class MRIDataset(Dataset):
             t2 = F.pad(t2, pad, "constant", 0)
             seg = F.pad(seg, pad, "constant", 0)
             # print(t1.shape[0], t2.shape[0], seg.shape[0])
-
-        print(self.t1_list[idx])
-        print(t1.shape)
-        print()
 
         # Resizing to required width/height 
         t1 = TF.resize(t1, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)

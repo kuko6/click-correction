@@ -10,15 +10,6 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 
 
-def get_glioma_indices(mask: torch.Tensor) -> tuple[int, int]:
-    """ Returns the first and last slice indices of the tumour in given mask """
-
-    first = torch.nonzero((mask == 1))[:,1][0].item()
-    last = torch.nonzero((mask == 1))[:,1][-1].item()
-
-    return first, last
-
-
 def min_max_normalise(image: torch.Tensor) -> torch.Tensor:
     """ 
     Basic min max scaler. \n
@@ -37,19 +28,27 @@ def min_max_normalise(image: torch.Tensor) -> torch.Tensor:
 class MRIDataset(Dataset):
     """ Torch Dataset which returns the stacked sequences and encoded mask. """
     
-    def __init__(self, t1_list, t2_list, seg_list, img_dims):
+    def __init__(self, t1_list: tuple[str], t2_list: tuple[str], seg_list: tuple[str], img_dims: tuple[int]):
         self.t1_list = t1_list
         self.t2_list = t2_list
         self.seg_list = seg_list
         self.img_dims = img_dims
 
     def __len__(self):
-      return len(self.t1_list)
+        return len(self.t1_list)
+    
+    def _get_glioma_indices(self, mask: torch.Tensor) -> tuple[int, int]:
+        """ Returns the first and last slice indices of the tumour in given mask """
+        
+        first = torch.nonzero((mask == 1))[:,0][0].item()
+        last = torch.nonzero((mask == 1))[:,0][-1].item()
+
+        return first, last
 
     def _get_new_depth(self, mask: torch.Tensor):
         """ Calculates new depth based on the position of the tumour """
         
-        first, last = get_glioma_indices(mask)
+        first, last = self._get_glioma_indices(mask)
         # range_length = last - first + 1
 
         # compute the desired padding size on both sides
@@ -85,6 +84,8 @@ class MRIDataset(Dataset):
         seg = torch.as_tensor(nib.load(self.seg_list[idx]).get_fdata(), dtype=torch.float32).permute(2, 0, 1)
         # print('old shapes: ', t1.shape, t2.shape, seg.shape)
 
+        print(t1.shape)
+
         # Crop the image 
         t1 = TF.center_crop(t1, (self.img_dims[1]*2, self.img_dims[2]*2))
         t2 = TF.center_crop(t2, (self.img_dims[1]*2, self.img_dims[2]*2))
@@ -109,6 +110,10 @@ class MRIDataset(Dataset):
             seg = F.pad(seg, pad, "constant", 0)
             # print(t1.shape[0], t2.shape[0], seg.shape[0])
 
+        print(self.t1_list[idx])
+        print(t1.shape)
+        print()
+
         # Resizing to required width/height 
         t1 = TF.resize(t1, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)
         t2 = TF.resize(t2, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)
@@ -122,15 +127,21 @@ class MRIDataset(Dataset):
         seg = seg.unsqueeze(0)
 
         return stacked, seg
-    
+
 
 if __name__ == '__main__':
-   data_path = 'data/all/'
-   t1_list = glob.glob(os.path.join(data_path, 'VS-*-*/vs_*/*_t1_*'))
-   t2_list = glob.glob(os.path.join(data_path, 'VS-*-*/vs_*/*_t2_*'))
-   seg_list = glob.glob(os.path.join(data_path, 'VS-*-*/vs_*/*_seg_*'))
+    data_path = 'data/all/'
+    t1_list = glob.glob(os.path.join(data_path, 'VS-*-*/vs_*/*_t1_*'))
+    t2_list = glob.glob(os.path.join(data_path, 'VS-*-*/vs_*/*_t2_*'))
+    seg_list = glob.glob(os.path.join(data_path, 'VS-*-*/vs_*/*_seg_*'))
 
-   data = MRIDataset([t1_list[0]], [t2_list[0]], [seg_list[0]], (40, 80, 80))
-   img, label = data[0]
-   print(img.shape, label.shape)
-   print(img.dtype, label.dtype)
+    # data = MRIDataset([t1_list[0]], [t2_list[0]], [seg_list[0]], (40, 80, 80))
+    data = MRIDataset(
+        ['data/all/VS-31-61/vs_gk_56/vs_gk_t1_refT2.nii.gz'], 
+        ['data/all/VS-31-61/vs_gk_56/vs_gk_t2_refT2.nii.gz'], 
+        ['data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz'], 
+        (40, 80, 80)
+    )
+    img, label = data[0]
+    print(img.shape, label.shape)
+    print(img.dtype, label.dtype)

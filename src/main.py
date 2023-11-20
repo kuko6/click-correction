@@ -13,7 +13,8 @@ from torch.utils.data import DataLoader
 from torchinfo import summary
 
 from model import Unet
-from data_generator import MRIDataset, get_glioma_indices
+from data_generator import MRIDataset
+from utils import get_glioma_indices
 
 from losses.dice import dice_coefficient, DiceLoss, DiceBCELoss
 from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss

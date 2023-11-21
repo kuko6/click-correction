@@ -4,7 +4,9 @@ import torch.nn.functional as F
 
 
 def tversky_index(y_pred: torch.Tensor, y_true: torch.Tensor, epsilon=1e-6, alpha=0.5, beta=0.5):
-    """ Computes the Tversky index """
+    """ 
+    Computes the Tversky index. With alpha, beta = 0.5 corresponds to Dice coefficient.
+    """
     
     TP = torch.sum(y_pred * y_true, dim=[2, 3, 4])    
     FP = torch.sum((1-y_true) * y_pred, dim=[2, 3, 4])
@@ -20,6 +22,9 @@ class TverskyLoss(nn.Module):
     ```
     tversky_loss = 1 - tversky_index
     ```
+    With alpha, beta = 0.5 the loss corresponds to Dice loss. 
+
+    https://link.springer.com/chapter/10.1007/978-3-319-67389-9_44
     """
 
     def __init__(self, alpha=0.5, beta=0.5):
@@ -34,9 +39,13 @@ class TverskyLoss(nn.Module):
 
 
 class FocalLoss(nn.Module):
-    """ Focal loss function """
+    """ 
+    Focal loss function. The gamma should be from [0.5, 5].
+
+    https://openaccess.thecvf.com/content_ICCV_2017/papers/Lin_Focal_Loss_for_ICCV_2017_paper.pdf
+    """
     
-    def __init__(self, alpha=None, gamma=2):
+    def __init__(self, alpha, gamma=2):
         super(FocalLoss, self).__init__()
         self.alpha = alpha
         self.gamma = gamma
@@ -55,6 +64,9 @@ class FocalTverskyLoss(nn.Module):
     ```
     focal_tversky_loss = (1 - tversky_index) ** gamma
     ```
+    With alpha, beta = 0.5 the loss corresponds to Dice loss.
+    
+    https://ieeexplore.ieee.org/abstract/document/8759329
     """
 
     def __init__(self, alpha=0.5, beta=0.5, gamma=.75):

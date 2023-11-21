@@ -7,6 +7,7 @@ import json
 
 from sklearn.model_selection import train_test_split
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from torch.utils.data import DataLoader
 from torchinfo import summary
@@ -18,12 +19,6 @@ from utils import get_glioma_indices, EarlyStopper
 from losses.dice import dice_coefficient, DiceLoss, DiceBCELoss
 from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss
 
-# print(sys.version_info)
-# print(torch.__version__)
-
-# print(torch.backends.cuda.is_built())
-# print(torch.backends.cudnn.is_available())
-# print(torch.cuda.is_available())
 
 use_wandb = True
 
@@ -105,9 +100,6 @@ def val(dataloader: DataLoader, model: Unet, loss_fn: torch.nn.Module, epoch: in
             x, y = x.to(device), y.to(device)
             y_pred = model(x)
 
-            # avg_loss += loss_fn(y_pred, y).item()
-            # avg_dice += dice_coefficient(y_pred, y).item()
-
             # Compute loss
             loss = loss_fn(y_pred, y)
             avg_loss += loss.item()
@@ -116,7 +108,7 @@ def val(dataloader: DataLoader, model: Unet, loss_fn: torch.nn.Module, epoch: in
             dice = dice_coefficient(y_pred, y).item()
             avg_dice += dice
 
-            print(f'validation step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice}', end='\r')
+            print(f'validation step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice:>5f}', end='\r')
 
             if i==0:
               preview(y_pred[0], y[0], dice_coefficient(y_pred, y), epoch)
@@ -136,10 +128,6 @@ def train_one_epoch(dataloader: DataLoader, model: Unet, loss_fn, optimizer) -> 
 
   for i, (x, y) in enumerate(dataloader):
     x, y = x.to(device), y.to(device)
-
-    # print(x.shape, y.shape)
-    # print(x.dtype, y.dtype)
-
     optimizer.zero_grad()
 
     # Get prediction
@@ -147,7 +135,6 @@ def train_one_epoch(dataloader: DataLoader, model: Unet, loss_fn, optimizer) -> 
 
     # Compute loss
     loss = loss_fn(y_pred, y)
-    # print(loss)
     avg_loss += loss.item()
 
     # Compute the dice coefficient
@@ -158,7 +145,7 @@ def train_one_epoch(dataloader: DataLoader, model: Unet, loss_fn, optimizer) -> 
     loss.backward()
     optimizer.step()
 
-    print(f'training step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice}', end='\r')
+    print(f'training step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice:>5f}', end='\r')
 
   avg_loss /= len(dataloader)
   avg_dice /= len(dataloader)
@@ -173,54 +160,81 @@ def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet,
     epochs = config['epochs']
     train_history = {'loss': [], 'dice': []}
     val_history = {'loss': [], 'dice': []}
+    best = {'loss': np.inf, 'dice': 0, 'epoch': 0}
 
-    early_stopper = EarlyStopper(patience=5, delta=0, mode='min')
+    early_stopper = EarlyStopper(patience=6, delta=0.02, mode='min')
 
     for epoch in range(epochs):
-        print('-------------------------------')
-        print(f'epoch: {epoch}')
+        print('===============================')
+        print(f'[Epoch: {epoch}]')
 
+        # Train and validate
         train_loss, train_dice = train_one_epoch(train_dataloader, model, loss_fn, optimizer)
+        print('-------------------------------')
         val_loss, val_dice = val(val_dataloader, model, loss_fn, epoch)
 
+        print('-------------------------------')
+        print(f'loss: {train_loss:>5f} dice: {train_dice:>5f}')
+        print(f'val loss: {val_loss:>5f} val dice: {val_dice:>5f}')
+        
+        # Log training and validation history
         train_history['loss'].append(train_loss)
         train_history['dice'].append(train_dice)
 
         val_history['loss'].append(val_loss)
         val_history['dice'].append(val_dice)
 
-        if config['scheduler']:
-            scheduler.step(val_loss)
-
-        print(f'loss: {train_loss:>5f} dice: {train_dice:>5f}')
-        print(f'val loss: {val_loss:>5f} val dice: {val_dice:>5f}')
-
         with open('outputs/train_history.json', 'w') as f:
             json.dump(train_history, f)
         with open('outputs/val_history.json', 'w') as f:
             json.dump(val_history, f)
+        
+        # Save checkpoint
+        model_checkpoint = {
+            'epoch': epoch, 
+            'model_state': model.state_dict(), 
+            'optimizer_state': optimizer.state_dict()
+        }
 
-        torch.save({
-            'epoch': epoch, 'model_state': model.state_dict(), 'optimizer_state': optimizer.state_dict()
-        }, 'outputs/checkpoint.pt')
+        torch.save(model_checkpoint, 'outputs/checkpoint.pt')
+        
+        # Save best checkpoint
+        if best['dice'] < val_dice:
+            print('-------------------------------')
+            print(f'new best!!! (loss: {best["loss"]:>5f} -> {val_loss:>5f}, dice: {best["dice"]:>5f} -> {val_dice:>5f})')
+            
+            torch.save(model_checkpoint, 'outputs/best.pt')    
+            
+            best['dice'] = val_dice
+            best['loss'] = val_loss
+            best['epoch'] = epoch
+            # best['model'] = model_checkpoint
 
+        # Log to wandb
         if use_wandb:
             wandb.log({
                 'epoch': epoch, 'loss': train_loss, 'dice': train_dice, 
                 'val_loss':val_loss, 'val_dice': val_dice, 'lr': optimizer.param_groups[0]["lr"]
             })
             wandb.log({'preview': wandb.Image(f'outputs/{epoch}_preview.png')})
-
-        # artifact = wandb.Artifact('checkpoint', type='model', metadata={'val_dice': val_dice})
-        # artifact.add_file('../outputs/checkpoint.pt')
-        # wandb.run.log_artifact(artifact)
         
+        # Run scheduler and early stopper
+        if config['scheduler']:
+            scheduler.step(val_loss)
+
         if early_stopper(val_loss):
+            print('===============================')
             print('Stopping early!!!')
             break
-        
     
+    print('===============================')
+    print(f'The best model was in epoch {best["epoch"]} with loss: {best["loss"]:>5f} and dice: {best["dice"]:>5f}')
+
     if use_wandb:
+        artifact = wandb.Artifact('checkpoint', type='model', metadata={'val_dice': val_dice})
+        artifact.add_file('../outputs/best.pt')
+        wandb.run.log_artifact(artifact)
+        
         wandb.finish()
 
 
@@ -257,15 +271,20 @@ def main():
 
     # Select loss function
     classes = {0: 64115061, 1: 396939}
-    total_pixels = classes[0] + classes[1]
-    # weight = torch.tensor(total_pixels/classes[0]).to(device)
-    # weight = torch.tensor(classes[0]/classes[1]).to(device)
-    # loss_fn = nn.BCELoss(weight=weight)
-    # loss_fn = DiceLoss()
-    # loss_fn = DiceBCELoss(weight=weight)
-    # loss_fn = FocalLoss(alpha=weight, gamma=2)
-    # loss_fn = TverskyLoss(alpha=.3, beta=.7)
-    loss_fn = FocalTverskyLoss(alpha=.3, beta=.7)
+    # total_pixels = classes[0] + classes[1]
+    # weight = torch.tensor(total_pixels/classes[0]).to(device)
+    weight = torch.tensor(classes[1]/classes[0]).to(device)
+
+    loss_functions = {
+        'bce': torch.nn.BCELoss(weight=weight),
+        'dice': DiceLoss(),
+        'dicebce': DiceBCELoss(weight=weight),
+        'focal': FocalLoss(alpha=weight, gamma=2),
+        'tversky': TverskyLoss(alpha=.3, beta=.7),
+        'focaltversky': FocalTverskyLoss(alpha=.3, beta=.7, gamma=.75)
+    }
+
+    loss_fn = loss_functions[config['loss']]
 
     # Train :D
     train(train_dataloader, val_dataloader, model, loss_fn, optimizer, scheduler)
@@ -273,4 +292,3 @@ def main():
 
 if __name__ == '__main__': 
     main()
-    

@@ -13,7 +13,9 @@ def get_glioma_indices(mask: torch.Tensor) -> tuple[int, int]:
 
 # https://stackoverflow.com/a/73704579
 class EarlyStopper:
-    def __init__(self, patience=1, delta=0, mode='min'):
+    """ Early stopper for training. Supports `'min'` and `'max'` mode.  """
+    
+    def __init__(self, patience=1, delta=0.0, mode='min'):
         self.patience = patience
         self.delta = delta
         self.counter = 0
@@ -28,7 +30,8 @@ class EarlyStopper:
                 self.counter = 0     
             elif value > (self.min_value + self.delta):
                 self.counter += 1
-                print(f'Early stopping: {self.counter}/{self.patience}')
+                print('-------------------------------')
+                print(f'early stopping: {self.counter}/{self.patience}')
                 
         elif self.mode == 'max':
             if value > self.max_value:
@@ -36,11 +39,10 @@ class EarlyStopper:
                 self.counter = 0     
             elif value < (self.max_value - self.delta):
                 self.counter += 1
-                print(f'Early stopping: {self.counter}/{self.patience}')
+                print('-------------------------------')
+                print(f'early stopping: {self.counter}/{self.patience}')
                 
         if self.counter >= self.patience:
             return True
-        
-        # print((self.min_value + self.min_delta))
         
         return False

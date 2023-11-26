@@ -9,6 +9,7 @@ import torchvision.transforms as transforms
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 
+from utils import generate_clicks
 
 def min_max_normalise(image: torch.Tensor) -> torch.Tensor:
     """ 
@@ -28,11 +29,12 @@ def min_max_normalise(image: torch.Tensor) -> torch.Tensor:
 class MRIDataset(Dataset):
     """ Torch Dataset which returns the stacked sequences and encoded mask. """
     
-    def __init__(self, t1_list: tuple[str], t2_list: tuple[str], seg_list: tuple[str], img_dims: tuple[int]):
+    def __init__(self, t1_list: tuple[str], t2_list: tuple[str], seg_list: tuple[str], img_dims: tuple[int], gen_clicks=False):
         self.t1_list = t1_list
         self.t2_list = t2_list
         self.seg_list = seg_list
         self.img_dims = img_dims
+        self.gen_clicks = gen_clicks
 
     def __len__(self):
         return len(self.t1_list)
@@ -106,6 +108,9 @@ class MRIDataset(Dataset):
         t1 = TF.resize(t1, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)
         t2 = TF.resize(t2, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)
         seg = TF.resize(seg, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)
+
+        if self.gen_clicks:
+            bg_clicks, fg_clicks = generate_clicks(seg)
 
         # Normalisation
         t1 = self._normalise(t1)

@@ -86,7 +86,7 @@ def preview(y_pred: torch.Tensor, y: torch.Tensor, dice: torch.Tensor, epoch=0):
     fig.suptitle(f'Dice: {dice.item()}', fontsize=10)
     plt.subplots_adjust(top=0.9)
 
-    fig.savefig(f'outputs/{epoch}_preview.png')
+    fig.savefig(f'outputs/images/{epoch}_preview.png')
     plt.close(fig)
 
 
@@ -162,7 +162,7 @@ def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet,
     val_history = {'loss': [], 'dice': []}
     best = {'loss': np.inf, 'dice': 0, 'epoch': 0}
 
-    early_stopper = EarlyStopper(patience=6, delta=0.02, mode='min')
+    early_stopper = EarlyStopper(patience=6, delta=0.01, mode='min')
 
     for epoch in range(epochs):
         print('===============================')
@@ -216,7 +216,7 @@ def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet,
                 'epoch': epoch, 'loss': train_loss, 'dice': train_dice, 
                 'val_loss':val_loss, 'val_dice': val_dice, 'lr': optimizer.param_groups[0]["lr"]
             })
-            wandb.log({'preview': wandb.Image(f'outputs/{epoch}_preview.png')})
+            wandb.log({'preview': wandb.Image(f'outputs/images/{epoch}_preview.png')})
         
         # Run scheduler and early stopper
         if config['scheduler']:
@@ -232,7 +232,7 @@ def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet,
 
     if use_wandb:
         artifact = wandb.Artifact('checkpoint', type='model', metadata={'val_dice': val_dice})
-        artifact.add_file('../outputs/best.pt')
+        artifact.add_file('outputs/best.pt')
         wandb.run.log_artifact(artifact)
         
         wandb.finish()
@@ -260,6 +260,7 @@ def main():
     
     if not os.path.isdir('outputs'):
         os.mkdir('outputs')
+    os.mkdir('outputs/images')
 
     # Prepare Datasets
     train_dataloader, val_dataloader = prepare_data(data_dir)

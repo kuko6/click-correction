@@ -2,6 +2,8 @@ import nibabel as nib
 import math
 import glob
 import os
+import cv2
+import numpy as np
 
 import torch
 from torch.utils.data import Dataset
@@ -9,7 +11,7 @@ import torchvision.transforms as transforms
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 
-from utils import generate_clicks
+# from utils import generate_clicks
 
 def min_max_normalise(image: torch.Tensor) -> torch.Tensor:
     """ 
@@ -47,6 +49,50 @@ class MRIDataset(Dataset):
 
         return first, last
 
+    def _generate_clicks(self, mask: torch.Tensor, fg=False, bg=False, clicks_num=2, click_size=2) -> tuple[torch.Tensor, torch.Tensor]:
+        """ Generate click masks """
+
+        first, last = self._get_glioma_indices(mask)
+        mask = mask.numpy()
+
+        bg_clicks = np.zeros_like(mask)
+        fg_clicks = np.zeros_like(mask)
+        for slice in range(first, last):
+            erosion_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(5, 5))
+            dilatation_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(17, 17))
+            eroded_seg = cv2.erode(mask[slice,:,:], kernel=erosion_kernel)
+            dilated_seg = cv2.dilate(mask[slice,:,:,], kernel=dilatation_kernel, iterations=4)
+
+            diff = mask[slice,:,:] - eroded_seg
+            diff2 = dilated_seg - mask[slice,:,:]
+
+            border_idx = np.where(diff == 1)
+            border_coords = list(zip(*border_idx))
+
+            # Get fg coordinates
+            inner_idx = np.where(mask[slice,:,:] == 1)
+            inner_coords = list(zip(*inner_idx))
+            inner_coords = list(set(inner_coords) - set(border_coords))
+            np.random.shuffle(inner_coords)
+            
+            # Get bg coordinates
+            outer_idx = np.where(diff2 == 1)
+            outer_coords = list(zip(*outer_idx))
+            outer_coords = list(set(outer_coords) - set(inner_coords))
+            np.random.shuffle(outer_coords)
+
+            # Add bg clicks
+            if bg:
+                for c in outer_coords[:clicks_num]:
+                    bg_clicks[slice,c[0]:c[0]+click_size, c[1]:c[1]+click_size] = 3
+
+            # Add fg clicks
+            if fg:
+                for c in inner_coords[:clicks_num]:
+                    fg_clicks[slice,c[0]:c[0]+click_size, c[1]:c[1]+click_size] = 4
+
+        return torch.stack((torch.as_tensor(bg_clicks), torch.as_tensor(fg_clicks)), axis=0)
+
     def _get_new_depth(self, mask: torch.Tensor):
         """ Calculates new depth based on the position of the tumour """
         
@@ -68,7 +114,7 @@ class MRIDataset(Dataset):
         
         return min_max_normalise(volume)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, None | torch.Tensor]:
         """
         Load the data and run the whole preprocessing pipeline. \n
         Returns the stacked sequences and encoded mask.
@@ -109,16 +155,17 @@ class MRIDataset(Dataset):
         t2 = TF.resize(t2, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)
         seg = TF.resize(seg, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)
 
-        if self.gen_clicks:
-            bg_clicks, fg_clicks = generate_clicks(seg)
-
         # Normalisation
         t1 = self._normalise(t1)
         t2 = self._normalise(t2)
-
         stacked = torch.stack((t1, t2), axis=0)
-        seg = seg.unsqueeze(0)
 
+        if self.gen_clicks:
+            clicks = self._generate_clicks(seg, fg=True, bg=True, clicks_num=20, click_size=1)
+            seg = seg.unsqueeze(0)
+            return stacked, seg, clicks
+        
+        seg = seg.unsqueeze(0)
         return stacked, seg
 
 
@@ -133,8 +180,13 @@ if __name__ == '__main__':
         ['data/all/VS-31-61/vs_gk_56/vs_gk_t1_refT2.nii.gz'], 
         ['data/all/VS-31-61/vs_gk_56/vs_gk_t2_refT2.nii.gz'], 
         ['data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz'], 
-        (40, 80, 80)
+        (40, 80, 80),
+        gen_clicks=True
     )
-    img, label = data[0]
+    img, label, clicks = data[0]
     print(img.shape, label.shape)
     print(img.dtype, label.dtype)
+    print(clicks[1].shape, clicks[1].dtype)
+
+    # seg = torch.as_tensor(nib.load('data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz').get_fdata(), dtype=torch.float32).permute(2, 0, 1)
+    # generate_clicks(seg)

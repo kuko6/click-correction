@@ -31,12 +31,12 @@ def min_max_normalise(image: torch.Tensor) -> torch.Tensor:
 class MRIDataset(Dataset):
     """ Torch Dataset which returns the stacked sequences and encoded mask. """
     
-    def __init__(self, t1_list: tuple[str], t2_list: tuple[str], seg_list: tuple[str], img_dims: tuple[int], gen_clicks=False):
+    def __init__(self, t1_list: tuple[str], t2_list: tuple[str], seg_list: tuple[str], img_dims: tuple[int], clicks = None):
         self.t1_list = t1_list
         self.t2_list = t2_list
         self.seg_list = seg_list
         self.img_dims = img_dims
-        self.gen_clicks = gen_clicks
+        self.clicks = clicks
 
     def __len__(self):
         return len(self.t1_list)
@@ -84,12 +84,12 @@ class MRIDataset(Dataset):
             # Add bg clicks
             if bg:
                 for c in outer_coords[:clicks_num]:
-                    bg_clicks[slice,c[0]:c[0]+click_size, c[1]:c[1]+click_size] = 3
+                    bg_clicks[slice,c[0]:c[0]+click_size, c[1]:c[1]+click_size] = 1
 
             # Add fg clicks
             if fg:
                 for c in inner_coords[:clicks_num]:
-                    fg_clicks[slice,c[0]:c[0]+click_size, c[1]:c[1]+click_size] = 4
+                    fg_clicks[slice,c[0]:c[0]+click_size, c[1]:c[1]+click_size] = 1
 
         return torch.stack((torch.as_tensor(bg_clicks), torch.as_tensor(fg_clicks)), axis=0)
 
@@ -160,10 +160,16 @@ class MRIDataset(Dataset):
         t2 = self._normalise(t2)
         stacked = torch.stack((t1, t2), axis=0)
 
-        if self.gen_clicks:
-            clicks = self._generate_clicks(seg, fg=True, bg=True, clicks_num=20, click_size=1)
-            seg = seg.unsqueeze(0)
-            return stacked, seg, clicks
+        if self.clicks and self.clicks['use']:
+            clicks = self._generate_clicks(
+                seg, 
+                fg=self.clicks['gen_fg'], 
+                bg=self.clicks['gen_bg'], 
+                clicks_num=self.clicks['num'], 
+                click_size=self.clicks['size']
+            )
+            # seg = seg.unsqueeze(0)
+            return stacked, clicks
         
         seg = seg.unsqueeze(0)
         return stacked, seg
@@ -183,10 +189,10 @@ if __name__ == '__main__':
         (40, 80, 80),
         gen_clicks=True
     )
-    img, label, clicks = data[0]
+    img, label = data[0]
     print(img.shape, label.shape)
     print(img.dtype, label.dtype)
-    print(clicks[1].shape, clicks[1].dtype)
+    # print(clicks[1].shape, clicks[1].dtype)
 
     # seg = torch.as_tensor(nib.load('data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz').get_fdata(), dtype=torch.float32).permute(2, 0, 1)
     # generate_clicks(seg)

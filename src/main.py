@@ -37,7 +37,7 @@ config = {
     "augment": False,
     "scheduler": True,
     "training": "base", # base, clicks-pretraining, clicks
-    "img_dims": (40, 80, 80) if device == 'cpu' else (64, 128, 128),
+    "img_dims": (64, 80, 80) if device == 'cpu' else (64, 128, 128),
     "clicks": {
         "use": False,
         "gen_fg": True,

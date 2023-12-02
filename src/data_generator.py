@@ -48,7 +48,27 @@ class MRIDataset(Dataset):
         last = torch.nonzero((mask == 1))[:,0][-1].item()
 
         return first, last
+    
+    def _select_points(self, coords, n, d=4):
+        valid_points = []
+        valid_points.append(coords[0])
+        
+        i = 1
+        while n != len(valid_points) and i < len(coords):
+            new_point = coords[i]
 
+            valid = True
+            for p in valid_points:
+                dist = np.linalg.norm(p - new_point)
+                if dist < d:
+                    valid = False
+                    break
+                
+            if valid:
+                valid_points.append(new_point)
+            
+            i += 1
+        
     def _generate_clicks(self, mask: torch.Tensor, fg=False, bg=False, clicks_num=2, click_size=2) -> tuple[torch.Tensor, torch.Tensor]:
         """ Generate click masks """
 
@@ -81,28 +101,34 @@ class MRIDataset(Dataset):
             outer_coords = list(set(outer_coords) - set(inner_coords))
             np.random.shuffle(outer_coords)
 
-            # Add bg clicks
+             # Add bg clicks
             if bg:
-                for c in outer_coords[:clicks_num]:
-                    bg_clicks[slice,c[0]:c[0]+click_size, c[1]:c[1]+click_size] = 1
+                selected_points = self._select_points(np.array(outer_coords), clicks_num)
+                for c in selected_points:
+                    bg_clicks[slice,c[0], c[1]] = 1
 
             # Add fg clicks
             if fg:
-                for c in inner_coords[:clicks_num]:
-                    fg_clicks[slice,c[0]:c[0]+click_size, c[1]:c[1]+click_size] = 1
+                selected_points = self._select_points(np.array(inner_coords), clicks_num)
+                for c in selected_points:
+                    fg_clicks[slice,c[0], c[1]] = 1
 
         return torch.stack((torch.as_tensor(bg_clicks), torch.as_tensor(fg_clicks)), axis=0)
 
     def _get_new_depth(self, mask: torch.Tensor):
-        """ Calculates new depth based on the position of the tumour """
+        """ Calculates new (start, end indices) based on the position of the tumour """
         
         first, last = self._get_glioma_indices(mask)
 
-        # compute the new start and end indices of the cropped depth dimension
-        mid_index = (first + last) // 2
-        start_index = max(mid_index - math.floor(self.img_dims[0] / 2), 0)
-        end_index = min(start_index + self.img_dims[0], mask.shape[0])
-
+        # new starting position will be 0, when the tumour starts low enough or 
+        # couple slices bellow the first index so the tumour isnt in the first few
+        # slices of the new volume
+        start_index = max(first - (self.img_dims[0] // 2), 0)
+        
+        # new endposition is calculated so the final dimensions match with 
+        # the requested ones in `self.img_dims`
+        end_index = start_index + self.img_dims[0]
+        
         return start_index, end_index
     
     def _normalise(self, volume: torch.Tensor) -> torch.Tensor:    
@@ -127,9 +153,17 @@ class MRIDataset(Dataset):
         # print('old shapes: ', t1.shape, t2.shape, seg.shape)
 
         # Crop the image 
-        t1 = TF.center_crop(t1, (self.img_dims[1]*2, self.img_dims[2]*2))
-        t2 = TF.center_crop(t2, (self.img_dims[1]*2, self.img_dims[2]*2))
-        seg = TF.center_crop(seg, (self.img_dims[1]*2, self.img_dims[2]*2))
+        if self.img_dims[1]*2 > t1.shape[1]:
+            # t1 = TF.center_crop(t1, (self.img_dims[1]+60, self.img_dims[2]+60))
+            # t2 = TF.center_crop(t2, (self.img_dims[1]+60, self.img_dims[2]+60))
+            # seg = TF.center_crop(seg, (self.img_dims[1]+60, self.img_dims[2]+60))
+            t1 = TF.center_crop(t1, (self.img_dims[1], self.img_dims[2]))
+            t2 = TF.center_crop(t2, (self.img_dims[1], self.img_dims[2]))
+            seg = TF.center_crop(seg, (self.img_dims[1], self.img_dims[2]))
+        else:
+            t1 = TF.center_crop(t1, (self.img_dims[1]*2, self.img_dims[2]*2))
+            t2 = TF.center_crop(t2, (self.img_dims[1]*2, self.img_dims[2]*2))
+            seg = TF.center_crop(seg, (self.img_dims[1]*2, self.img_dims[2]*2))
 
         # Crop the depth of the volumes when they have bigger depth than required
         if t1.shape[0] > self.img_dims[0]:

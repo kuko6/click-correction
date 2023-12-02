@@ -22,12 +22,13 @@ from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss
 use_wandb = True
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f'Using {device} device')
+print(f'[Using {device} device]')
 
 config = {
     "lr": 1e-3,
-    "num_classes": 1,
     "img_channels": 2,
+    "num_classes": 1,
+    "conv_blocks": 3 if device == 'cpu' else 4,
     "dataset": "Schwannoma",
     "epochs": 50,
     "batch_size": 2,
@@ -35,8 +36,10 @@ config = {
     "optimizer": "Adam",
     "augment": False,
     "scheduler": True,
+    "training": "base", # base, clicks-pretraining, clicks
+    "img_dims": (40, 80, 80) if device == 'cpu' else (64, 128, 128),
     "clicks": {
-        "use": True,
+        "use": False,
         "gen_fg": True,
         "gen_bg": False,
         "num": 20,
@@ -56,15 +59,20 @@ def prepare_data(data_dir: str) -> MRIDataset:
     t2_val.append(t2_train.pop(-1))
     seg_val.append(seg_train.pop(-1))
 
-    if config['clicks']:
+    if config['clicks']['use']:
         preview_clicks(t1_list, t2_list, seg_list, config['clicks'])
     
-    train_data = MRIDataset(t1_train, t2_train, seg_train, (40, 80, 80), clicks=config['clicks'])
-    val_data = MRIDataset(t1_val, t2_val, seg_val, (40, 80, 80))
+    if config['training'] == 'base':
+        train_data = MRIDataset(t1_train, t2_train, seg_train, config['img_dims'], clicks=config['clicks'])
+    elif config['training'] == 'clicks-pretraining':
+        train_data = MRIDataset(t1_train[40:], t2_train[40:], seg_train[40:], config['img_dims'], clicks=config['clicks'])
+    elif config['training'] == 'clicks':
+        train_data = MRIDataset(t1_train[:40], t2_train[:40], seg_train[:40], config['img_dims'], clicks=config['clicks'])
+    val_data = MRIDataset(t1_val, t2_val, seg_val, config['img_dims'])
   
     print(len(train_data), len(val_data))
-    print(len(t1_train), len(t2_train), len(seg_train))
-    print(len(t1_val), len(t2_val), len(seg_val))
+    # print(len(t1_train), len(t2_train), len(seg_train))
+    # print(len(t1_val), len(t2_val), len(seg_val))
 
     train_dataloader = DataLoader(train_data, batch_size=config['batch_size'], shuffle=True)
     val_dataloader = DataLoader(val_data, batch_size=config['batch_size'], shuffle=False)
@@ -144,7 +152,7 @@ def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet,
     val_history = {'loss': [], 'dice': []}
     best = {'loss': np.inf, 'dice': 0, 'epoch': 0}
 
-    early_stopper = EarlyStopper(patience=6, delta=0.01, mode='min')
+    early_stopper = EarlyStopper(patience=6, delta=0.01, mode='max')
 
     for epoch in range(epochs):
         print('===============================')
@@ -204,7 +212,7 @@ def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet,
         if config['scheduler']:
             scheduler.step(val_loss)
 
-        if early_stopper(val_loss):
+        if early_stopper(val_dice):
             print('===============================')
             print('Stopping early!!!')
             break
@@ -213,7 +221,7 @@ def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet,
     print(f'The best model was in epoch {best["epoch"]} with loss: {best["loss"]:>5f} and dice: {best["dice"]:>5f}')
 
     if use_wandb:
-        artifact = wandb.Artifact('checkpoint', type='model', metadata={'val_dice': val_dice})
+        artifact = wandb.Artifact('best_model', type='model', metadata={'val_dice': val_dice})
         artifact.add_file('outputs/best.pt')
         wandb.run.log_artifact(artifact)
         
@@ -224,6 +232,7 @@ def main():
     # Parse arguments
     parser = argparse.ArgumentParser()
     parser.add_argument('--data-path', type=str, help='path to data')
+    parser.add_argument('--model-path', type=str, help='path to pretrained model')
     parser.add_argument('--wandb', type=str, help='wandb id')
     
     args = parser.parse_args()
@@ -248,12 +257,29 @@ def main():
     # Prepare Datasets
     train_dataloader, val_dataloader = prepare_data(data_dir)
 
-    return
+    # Initialize model
+    model = Unet(in_channels=config['img_channels'], out_channels=config['num_classes'], blocks=config['conv_blocks']).to(device)
+    # writes model architecture to a file (just for experiment logging)
+    with open('outputs/architecture.txt', 'w') as f:
+        model_summary = summary(
+            Unet(in_channels=config['img_channels'], 
+                out_channels=config['num_classes'], 
+                blocks=config['conv_blocks'],
+            ), 
+            input_size=(config['batch_size'], config['img_channels'], *config['img_dims']), 
+            verbose=0
+        )
+        f.write(str(model_summary))
 
-    # Initialize model and optimizer
-    model = Unet().to(device)
+    # Initialize optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'])
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.1)
+    
+    # Load pretrained model
+    if args.model_path and config['training'] == 'clicks':
+        checkpoint = torch.load(args.model_path, map_location='cuda:0')
+        model.load_state_dict(checkpoint['model_state'])
+        optimizer.load_state_dict(checkpoint['optimizer_state'])
 
     # Select loss function
     classes = {0: 64115061, 1: 396939}

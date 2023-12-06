@@ -53,13 +53,9 @@ class UpBlock(nn.Module):
 
     def forward(self, x, skip):
         upscaled = self.up(x)
-        # print(upscaled.shape, skip.shape)
         concat = torch.cat([skip, upscaled], dim=1)
-        # print(concat.shape)
         out = self.conv(concat)
-        # print(out.shape)
 
-        # print()
         return out
 
 
@@ -76,9 +72,9 @@ class Unet(nn.Module):
         self.upsampling_path = nn.ModuleList()
 
         if blocks == 3:
-            channels = [in_channels, 32, 64, 128]
+            channels = [in_channels, 16, 32, 64]
         elif blocks == 4:
-            channels = [in_channels, 32, 64, 128, 256]
+            channels = [in_channels, 16, 32, 64, 128]
 
         # Downsampling path
         for i in range(0, len(channels)-1):
@@ -102,24 +98,6 @@ class Unet(nn.Module):
         )
 
     def forward(self, x):
-        # # Downsampling path
-        # skip1, down1 = self.down1(x)
-        # skip2, down2 = self.down2(down1)
-        # skip3, down3 = self.down3(down2)
-        # # skip4, down4 = self.down4(down3)
-
-        # # Bottle neck
-        # bottom = self.bottle_neck(down3)
-
-        # # Expanding path
-        # # up1 = self.up1(bottom, skip4)
-        # up2 = self.up2(bottom, skip3)
-        # up3 = self.up3(up2, skip2)
-        # up4 = self.up4(up3, skip1)
-
-        # # Output
-        # out = self.output(up4)
-
         out = x
 
         # Downsampling path

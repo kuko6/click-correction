@@ -28,7 +28,7 @@ config = {
     "lr": 1e-3,
     "img_channels": 2,
     "num_classes": 1,
-    "conv_blocks": 3 if device == 'cpu' else 4,
+    "conv_blocks": 3, # 3 if device == 'cpu' else 4
     "dataset": "Schwannoma",
     "epochs": 50,
     "batch_size": 2,
@@ -37,7 +37,7 @@ config = {
     "augment": False,
     "scheduler": True,
     "training": "base", # base, clicks-pretraining, clicks
-    "img_dims": (64, 80, 80) if device == 'cpu' else (64, 128, 128),
+    "img_dims": (40, 128, 128), # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
     "clicks": {
         "use": False,
         "gen_fg": True,

@@ -69,50 +69,79 @@ class Unet(nn.Module):
     one block consists of: \n
     `3dConv -> 3dBatchNorm -> ReLu -> 3dConv -> 3dBatchNorm -> ReLu`
     and a sampling operation (`3dMaxPool`/`3dConvTranspose`).
-    
-    Accepts images of `(2, 40, 80, 80)` and returns predictions 
-    of shape `(1, 40, 80, 80)` after sigmoid.
     """
-    def __init__(self):
+    def __init__(self, in_channels, out_channels, blocks=3):
         super().__init__()
-        self.down1 = DownBlock(in_channels=[2, 32], out_channels=[32, 32])
-        self.down2 = DownBlock(in_channels=[32, 64], out_channels=[64, 64])
-        self.down3 = DownBlock(in_channels=[64, 128], out_channels=[128, 128])
-        # self.down4 = DownBlock(in_channels=[64, 128], out_channels=[128, 128])
+        self.downsampling_path = nn.ModuleList()
+        self.upsampling_path = nn.ModuleList()
 
-        self.bottle_neck = build_conv_block(in_channels=[128, 256], out_channels=[256, 256])
+        if blocks == 3:
+            channels = [in_channels, 32, 64, 128]
+        elif blocks == 4:
+            channels = [in_channels, 32, 64, 128, 256]
 
-        # self.up1 = UpBlock(in_channels=[256, 128], out_channels=[128, 128])
-        self.up2 = UpBlock(in_channels=[256, 128], out_channels=[128, 128])
-        self.up3 = UpBlock(in_channels=[128, 64], out_channels=[64, 64])
-        self.up4 = UpBlock(in_channels=[64, 32], out_channels=[32, 32])
+        # Downsampling path
+        for i in range(0, len(channels)-1):
+            self.downsampling_path.append(
+                DownBlock(in_channels=[channels[i], channels[i+1]], out_channels=[channels[i+1], channels[i+1]])
+            )
+        
+        # Bottle neck
+        self.bottle_neck = build_conv_block(in_channels=[channels[-1], channels[-1]*2], out_channels=[channels[-1]*2, channels[-1]*2])
+        
+        # Upsampling path
+        for i in range(len(channels)-1, 0, -1):
+            self.upsampling_path.append(
+                UpBlock(in_channels=[channels[i]*2, channels[i]], out_channels=[channels[i], channels[i]])
+            )
 
+        # Output
         self.output = nn.Sequential(
-            nn.Conv3d(in_channels=32, out_channels=1, kernel_size=1),
+            nn.Conv3d(in_channels=channels[1], out_channels=out_channels, kernel_size=1),
             nn.Sigmoid()
         )
 
     def forward(self, x):
-        # Contracting path
-        skip1, down1 = self.down1(x)
-        skip2, down2 = self.down2(down1)
-        skip3, down3 = self.down3(down2)
-        # skip4, down4 = self.down4(down3)
+        # # Downsampling path
+        # skip1, down1 = self.down1(x)
+        # skip2, down2 = self.down2(down1)
+        # skip3, down3 = self.down3(down2)
+        # # skip4, down4 = self.down4(down3)
 
+        # # Bottle neck
+        # bottom = self.bottle_neck(down3)
+
+        # # Expanding path
+        # # up1 = self.up1(bottom, skip4)
+        # up2 = self.up2(bottom, skip3)
+        # up3 = self.up3(up2, skip2)
+        # up4 = self.up4(up3, skip1)
+
+        # # Output
+        # out = self.output(up4)
+
+        out = x
+
+        # Downsampling path
+        skips = []
+        for block in self.downsampling_path:
+            skip, out = block(out)
+            skips.append(skip)
+        
         # Bottle neck
-        bottom = self.bottle_neck(down3)
+        out = self.bottle_neck(out)
 
-        # Expanding path
-        # up1 = self.up1(bottom, skip4)
-        up2 = self.up2(bottom, skip3)
-        up3 = self.up3(up2, skip2)
-        up4 = self.up4(up3, skip1)
+        # Upsampling path
+        skips.reverse()
+        for (block, skip) in zip(self.upsampling_path, skips):
+            out = block(out, skip)
 
         # Output
-        out = self.output(up4)
-
+        out = self.output(out)
         return out
 
 
 if __name__ == '__main__':
-    summary(Unet(), input_size=(2, 2, 40, 80, 80))
+    summary(Unet(in_channels=2, out_channels=1), input_size=(2, 2, 40, 80, 80))
+    # print(Unet()._modules)
+    # summary(Unet(block_num=4), input_size=(2, 2, 64, 128, 128))

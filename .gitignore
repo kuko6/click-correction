@@ -8,5 +8,6 @@ outputs/
 training_outputs/
 data/
 wandb/
+models/
 
 config*.json

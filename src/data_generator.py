@@ -154,9 +154,6 @@ class MRIDataset(Dataset):
 
         # Crop the image 
         if self.img_dims[1]*2 > t1.shape[1]:
-            # t1 = TF.center_crop(t1, (self.img_dims[1]+60, self.img_dims[2]+60))
-            # t2 = TF.center_crop(t2, (self.img_dims[1]+60, self.img_dims[2]+60))
-            # seg = TF.center_crop(seg, (self.img_dims[1]+60, self.img_dims[2]+60))
             t1 = TF.center_crop(t1, (self.img_dims[1], self.img_dims[2]))
             t2 = TF.center_crop(t2, (self.img_dims[1], self.img_dims[2]))
             seg = TF.center_crop(seg, (self.img_dims[1], self.img_dims[2]))
@@ -171,10 +168,6 @@ class MRIDataset(Dataset):
             t1 = t1[start_index:end_index,:,:]
             t2 = t2[start_index:end_index,:,:]
             seg = seg[start_index:end_index,:,:]
-            # print(t1.shape[0], t2.shape[0], seg.shape[0])
-
-            # first, last = self._get_glioma_indices(seg)
-            # print(f'new indices: {first}, {last} : {first - last}')
         
         # When the depth is smaller than required fill the difference with zeros     
         elif t1.shape[0] < self.img_dims[0]:
@@ -182,7 +175,6 @@ class MRIDataset(Dataset):
             t1 = F.pad(t1, pad, "constant", 0)
             t2 = F.pad(t2, pad, "constant", 0)
             seg = F.pad(seg, pad, "constant", 0)
-            # print(t1.shape[0], t2.shape[0], seg.shape[0])
 
         # Resizing to required width/height 
         t1 = TF.resize(t1, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)

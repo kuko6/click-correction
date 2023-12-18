@@ -63,13 +63,15 @@ class MRIDataset(Dataset):
                 if dist < d:
                     valid = False
                     break
-                
+
             if valid:
                 valid_points.append(new_point)
             
             i += 1
         
-    def _generate_clicks(self, mask: torch.Tensor, fg=False, bg=False, clicks_num=2, click_size=2) -> tuple[torch.Tensor, torch.Tensor]:
+        return valid_points
+        
+    def _generate_clicks(self, mask: torch.Tensor, fg=False, bg=False, border=False, clicks_num=2, click_size=2) -> tuple[torch.Tensor, torch.Tensor]:
         """ Generate click masks """
 
         first, last = self._get_glioma_indices(mask)
@@ -77,8 +79,9 @@ class MRIDataset(Dataset):
 
         bg_clicks = np.zeros_like(mask)
         fg_clicks = np.zeros_like(mask)
+        border_clicks = np.zeros_like(mask)
         for slice in range(first, last):
-            erosion_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(5, 5))
+            erosion_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(3, 3))
             dilatation_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(17, 17))
             eroded_seg = cv2.erode(mask[slice,:,:], kernel=erosion_kernel)
             dilated_seg = cv2.dilate(mask[slice,:,:,], kernel=dilatation_kernel, iterations=4)
@@ -101,7 +104,13 @@ class MRIDataset(Dataset):
             outer_coords = list(set(outer_coords) - set(inner_coords))
             np.random.shuffle(outer_coords)
 
-             # Add bg clicks
+            # Add border clicks
+            if border:
+                selected_points = self._select_points(np.array(border_coords), clicks_num)
+                for c in selected_points:
+                    border_clicks[slice,c[0], c[1]] = 2
+
+            # Add bg clicks
             if bg:
                 selected_points = self._select_points(np.array(outer_coords), clicks_num)
                 for c in selected_points:
@@ -112,7 +121,11 @@ class MRIDataset(Dataset):
                 selected_points = self._select_points(np.array(inner_coords), clicks_num)
                 for c in selected_points:
                     fg_clicks[slice,c[0], c[1]] = 1
-
+        
+        if border: 
+            # return torch.as_tensor(border_clicks)
+            return torch.as_tensor(border_clicks).unsqueeze(0)
+        
         return torch.stack((torch.as_tensor(bg_clicks), torch.as_tensor(fg_clicks)), axis=0)
 
     def _get_new_depth(self, mask: torch.Tensor):
@@ -191,6 +204,7 @@ class MRIDataset(Dataset):
                 seg, 
                 fg=self.clicks['gen_fg'], 
                 bg=self.clicks['gen_bg'], 
+                border=self.clicks['gen_border'], 
                 clicks_num=self.clicks['num'], 
                 click_size=self.clicks['size']
             )

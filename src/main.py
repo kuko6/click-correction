@@ -36,12 +36,13 @@ config = {
     "optimizer": "Adam",
     "augment": False,
     "scheduler": True,
-    "training": "base", # base, clicks-pretraining, clicks
     "img_dims": (40, 128, 128), # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
+    "training": "clicks", # base, clicks-pretraining, clicks
     "clicks": {
-        "use": False,
-        "gen_fg": True,
+        "use": True,
+        "gen_fg": False,
         "gen_bg": False,
+        "gen_border": True,
         "num": 20,
         "size": 1
     }
@@ -59,14 +60,14 @@ def prepare_data(data_dir: str) -> MRIDataset:
     t2_val.append(t2_train.pop(-1))
     seg_val.append(seg_train.pop(-1))
 
-    if config['clicks']['use']:
-        preview_clicks(t1_list, t2_list, seg_list, config['clicks'])
+    # if config['clicks']['use']:
+    #     preview_clicks(t1_list, t2_list, seg_list, config['clicks'])
     
     if config['training'] == 'base':
         train_data = MRIDataset(t1_train, t2_train, seg_train, config['img_dims'], clicks=config['clicks'])
-    elif config['training'] == 'clicks-pretraining':
-        train_data = MRIDataset(t1_train[40:], t2_train[40:], seg_train[40:], config['img_dims'], clicks=config['clicks'])
     elif config['training'] == 'clicks':
+        train_data = MRIDataset(t1_train[40:], t2_train[40:], seg_train[40:], config['img_dims'], clicks=config['clicks'])
+    elif config['training'] == 'clicks-pretraining':
         train_data = MRIDataset(t1_train[:40], t2_train[:40], seg_train[:40], config['img_dims'], clicks=config['clicks'])
     val_data = MRIDataset(t1_val, t2_val, seg_val, config['img_dims'])
   

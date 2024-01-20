@@ -17,6 +17,7 @@ from utils import EarlyStopper, preview, preview_clicks
 
 from losses.dice import dice_coefficient, DiceLoss, DiceBCELoss
 from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss
+from losses.clicks import DistanceLoss
 
 
 use_wandb = True
@@ -25,26 +26,26 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f'[Using {device} device]')
 
 config = {
-    "lr": 1e-3,
-    "img_channels": 2,
-    "num_classes": 1,
-    "conv_blocks": 3, # 3 if device == 'cpu' else 4
-    "dataset": "Schwannoma",
-    "epochs": 50,
-    "batch_size": 2,
-    "loss": "focaltversky", 
-    "optimizer": "Adam",
-    "augment": False,
-    "scheduler": True,
-    "img_dims": (40, 128, 128), # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
-    "training": "clicks", # base, clicks-pretraining, clicks
-    "clicks": {
-        "use": True,
-        "gen_fg": False,
-        "gen_bg": False,
-        "gen_border": True,
-        "num": 20,
-        "size": 1
+    'lr': 1e-3,
+    'img_channels': 2,
+    'num_classes': 1,
+    'conv_blocks': 3, # 3 if device == 'cpu' else 4
+    'dataset': 'Schwannoma',
+    'epochs': 50,
+    'batch_size': 2,
+    'loss': 'distance', 
+    'optimizer': 'Adam',
+    'augment': False,
+    'scheduler': True,
+    'img_dims': (40, 128, 128), # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
+    'training': 'clicks', # base, clicks-pretraining, clicks
+    'clicks': {
+        'use': True,
+        'gen_fg': False,
+        'gen_bg': False,
+        'gen_border': True,
+        'num': 20,
+        'size': 1
     }
 }
 
@@ -241,6 +242,7 @@ def main():
 
     if not args.data_path:
         print('You need to specify datapath!!!! >:(')
+        return
 
     wandb_key = args.wandb
     if use_wandb and wandb_key:
@@ -294,7 +296,8 @@ def main():
         'dicebce': DiceBCELoss(weight=weight),
         'focal': FocalLoss(alpha=weight, gamma=2),
         'tversky': TverskyLoss(alpha=.3, beta=.7),
-        'focaltversky': FocalTverskyLoss(alpha=.3, beta=.7, gamma=.75)
+        'focaltversky': FocalTverskyLoss(alpha=.3, beta=.7, gamma=.75),
+        'distance': DistanceLoss(device=device)
     }
 
     loss_fn = loss_functions[config['loss']]

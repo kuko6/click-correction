@@ -91,7 +91,8 @@ class MRIDataset(Dataset):
 
             border_idx = np.where(diff == 1)
             border_coords = list(zip(*border_idx))
-
+            np.random.shuffle(border_coords)
+            
             # Get fg coordinates
             inner_idx = np.where(mask[slice,:,:] == 1)
             inner_coords = list(zip(*inner_idx))
@@ -138,7 +139,7 @@ class MRIDataset(Dataset):
         # slices of the new volume
         start_index = max(first - (self.img_dims[0] // 2), 0)
         
-        # new endposition is calculated so the final dimensions match with 
+        # new end position is calculated so the final dimensions match with 
         # the requested ones in `self.img_dims`
         end_index = start_index + self.img_dims[0]
         
@@ -227,7 +228,14 @@ if __name__ == '__main__':
         ['data/all/VS-31-61/vs_gk_56/vs_gk_t2_refT2.nii.gz'], 
         ['data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz'], 
         (40, 80, 80),
-        gen_clicks=True
+        clicks = {
+            'use': True,
+            'gen_fg': False,
+            'gen_bg': False,
+            'gen_border': True,
+            'num': 20,
+            'size': 1
+        }
     )
     img, label = data[0]
     print(img.shape, label.shape)

@@ -261,7 +261,12 @@ def main():
     train_dataloader, val_dataloader = prepare_data(data_dir)
 
     # Initialize model
-    model = Unet(in_channels=config['img_channels'], out_channels=config['num_classes'], blocks=config['conv_blocks']).to(device)
+    model = Unet(
+        in_channels=config['img_channels'], 
+        out_channels=config['num_classes'], 
+        blocks=config['conv_blocks']
+    ).to(device)
+
     # writes model architecture to a file (just for experiment logging)
     with open('outputs/architecture.txt', 'w') as f:
         model_summary = summary(
@@ -280,7 +285,8 @@ def main():
     
     # Load pretrained model
     if args.model_path and config['training'] == 'clicks':
-        checkpoint = torch.load(args.model_path, map_location='cuda:0')
+        print('Using pretrained model')
+        checkpoint = torch.load(args.model_path, map_location=device)
         model.load_state_dict(checkpoint['model_state'])
         optimizer.load_state_dict(checkpoint['optimizer_state'])
 
@@ -297,7 +303,7 @@ def main():
         'focal': FocalLoss(alpha=weight, gamma=2),
         'tversky': TverskyLoss(alpha=.3, beta=.7),
         'focaltversky': FocalTverskyLoss(alpha=.3, beta=.7, gamma=.75),
-        'distance': DistanceLoss(device=device)
+        'distance': DistanceLoss(thresh_val=10.0, probs=True, probs_threshold=0.7)
     }
 
     loss_fn = loss_functions[config['loss']]

@@ -109,7 +109,7 @@ class MRIDataset(Dataset):
             if border:
                 selected_points = self._select_points(np.array(border_coords), clicks_num)
                 for c in selected_points:
-                    border_clicks[slice,c[0], c[1]] = 2
+                    border_clicks[slice,c[0], c[1]] = 1
 
             # Add bg clicks
             if bg:

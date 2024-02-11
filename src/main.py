@@ -31,12 +31,13 @@ config = {
     'num_classes': 1,
     'conv_blocks': 3, # 3 if device == 'cpu' else 4
     'dataset': 'Schwannoma',
-    'epochs': 50,
+    'epochs': 30,
     'batch_size': 2,
-    'loss': 'distance', 
+    'loss': 'dice', 
     'optimizer': 'Adam',
     'augment': False,
     'scheduler': True,
+    'early_stopper': False,
     'img_dims': (40, 128, 128), # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
     'training': 'clicks', # base, clicks-pretraining, clicks
     'clicks': {
@@ -68,6 +69,7 @@ def prepare_data(data_dir: str) -> MRIDataset:
         train_data = MRIDataset(t1_train, t2_train, seg_train, config['img_dims'], clicks=config['clicks'])
     elif config['training'] == 'clicks':
         train_data = MRIDataset(t1_train[40:], t2_train[40:], seg_train[40:], config['img_dims'], clicks=config['clicks'])
+        # train_data = MRIDataset(t1_train, t2_train, seg_train, config['img_dims'], clicks=config['clicks'])
     elif config['training'] == 'clicks-pretraining':
         train_data = MRIDataset(t1_train[:40], t2_train[:40], seg_train[:40], config['img_dims'], clicks=config['clicks'])
     val_data = MRIDataset(t1_val, t2_val, seg_val, config['img_dims'])
@@ -154,7 +156,8 @@ def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet,
     val_history = {'loss': [], 'dice': []}
     best = {'loss': np.inf, 'dice': 0, 'epoch': 0}
 
-    early_stopper = EarlyStopper(patience=6, delta=0.01, mode='max')
+    if config['early_stopper']:
+        early_stopper = EarlyStopper(patience=6, delta=0.01, mode='max')
 
     for epoch in range(epochs):
         print('===============================')
@@ -214,10 +217,11 @@ def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet,
         if config['scheduler']:
             scheduler.step(val_loss)
 
-        if early_stopper(val_dice):
-            print('===============================')
-            print('Stopping early!!!')
-            break
+        if config['early_stopper']:
+            if early_stopper(val_dice):
+                print('===============================')
+                print('Stopping early!!!')
+                break
     
     print('===============================')
     print(f'The best model was in epoch {best["epoch"]} with loss: {best["loss"]:>5f} and dice: {best["dice"]:>5f}')
@@ -226,7 +230,6 @@ def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet,
         artifact = wandb.Artifact('best_model', type='model', metadata={'val_dice': val_dice})
         artifact.add_file('outputs/best.pt')
         wandb.run.log_artifact(artifact)
-        
         wandb.finish()
 
 

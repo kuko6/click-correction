@@ -12,6 +12,7 @@ class DistanceLoss(nn.Module):
         self.thresh_mode = thresh_mode
         self.probs = probs
         self.probs_threshold = probs_threshold
+        self.alpha = 3
 
     def forward(self, y_pred, y_true):
         combined = torch.zeros_like(y_pred)
@@ -49,11 +50,12 @@ class DistanceLoss(nn.Module):
         # loss calculation
         distance_loss = torch.abs(1 - torch.mean(combined[a]))
         dice_loss = 1 - dice_coefficient(y_pred, y_true)
+        loss = dice_loss + (self.alpha * distance_loss)
+
         # print(torch.mean(combined[a]))
         # print(distance_loss, dice_loss)
         # loss = combined[a] / len(a)
         # print(dice_loss.grad_fn)
-        loss = distance_loss + dice_loss
         
         return loss
     

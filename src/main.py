@@ -33,11 +33,11 @@ config = {
     'dataset': 'Schwannoma',
     'epochs': 30,
     'batch_size': 2,
-    'loss': 'dice', 
+    'loss': 'distance', 
     'optimizer': 'Adam',
     'augment': False,
     'scheduler': True,
-    'early_stopper': False,
+    'early_stopper': True,
     'img_dims': (40, 128, 128), # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
     'training': 'clicks', # base, clicks-pretraining, clicks
     'clicks': {
@@ -45,7 +45,7 @@ config = {
         'gen_fg': False,
         'gen_bg': False,
         'gen_border': True,
-        'num': 20,
+        'num': 40,
         'size': 1
     }
 }
@@ -67,13 +67,16 @@ def prepare_data(data_dir: str) -> MRIDataset:
     
     if config['training'] == 'base':
         train_data = MRIDataset(t1_train, t2_train, seg_train, config['img_dims'], clicks=config['clicks'])
+        val_data = MRIDataset(t1_val, t2_val, seg_val, config['img_dims'])
     elif config['training'] == 'clicks':
         train_data = MRIDataset(t1_train[40:], t2_train[40:], seg_train[40:], config['img_dims'], clicks=config['clicks'])
+        val_data = MRIDataset(t1_val[10:], t2_val[10:], seg_val[10:], config['img_dims'], clicks=config['clicks'])
         # train_data = MRIDataset(t1_train, t2_train, seg_train, config['img_dims'], clicks=config['clicks'])
+        # val_data = MRIDataset(t1_val, t2_val, seg_val, config['img_dims'])
     elif config['training'] == 'clicks-pretraining':
-        train_data = MRIDataset(t1_train[:40], t2_train[:40], seg_train[:40], config['img_dims'], clicks=config['clicks'])
-    val_data = MRIDataset(t1_val, t2_val, seg_val, config['img_dims'])
-  
+        train_data = MRIDataset(t1_train[:40], t2_train[:40], seg_train[:40], config['img_dims'], clicks=False)
+        val_data = MRIDataset(t1_val[:10], t2_val[:10], seg_val[:10], config['img_dims'])
+    
     print(len(train_data), len(val_data))
     # print(len(t1_train), len(t2_train), len(seg_train))
     # print(len(t1_val), len(t2_val), len(seg_val))
@@ -250,7 +253,7 @@ def main():
     wandb_key = args.wandb
     if use_wandb and wandb_key:
         wandb.login(key=wandb_key)
-        wandb.init(project='DP', entity='kuko', reinit=True, config=config)    
+        wandb.init(project='DP', entity='kuko', reinit=True, config=config)
 
     data_dir = args.data_path
     print(os.listdir(data_dir))
@@ -306,7 +309,7 @@ def main():
         'focal': FocalLoss(alpha=weight, gamma=2),
         'tversky': TverskyLoss(alpha=.3, beta=.7),
         'focaltversky': FocalTverskyLoss(alpha=.3, beta=.7, gamma=.75),
-        'distance': DistanceLoss(thresh_val=10.0, probs=True, probs_threshold=0.7)
+        'distance': DistanceLoss(thresh_val=10.0, probs=True, preds_threshold=0.7)
     }
 
     loss_fn = loss_functions[config['loss']]

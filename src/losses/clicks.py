@@ -4,14 +4,17 @@ import scipy
 from losses.dice import dice_coefficient
 from utils import get_glioma_indices
 
+# def clicks_dice(y_pred: torch.Tensor, y_true: torch.Tensor):
+#     pass
+
 class DistanceLoss(nn.Module):
-    def __init__(self, thresh_val: None | int, thresh_mode='max', probs=True, probs_threshold=0.7):
+    def __init__(self, thresh_val: None | int, thresh_mode='max', probs=True, preds_threshold=0.7):
         super().__init__()
         
         self.thresh_val = thresh_val
         self.thresh_mode = thresh_mode
         self.probs = probs
-        self.probs_threshold = probs_threshold
+        self.preds_threshold = preds_threshold
         self.alpha = 3
 
     def forward(self, y_pred, y_true):
@@ -19,8 +22,7 @@ class DistanceLoss(nn.Module):
         
         if self.probs:
             # threshold the probabilities
-            # ! might overide the original predictions !
-            y_threshed = (y_pred > self.probs_threshold).type(torch.float32).detach().cpu()
+            y_threshed = (y_pred > self.preds_threshold).type(torch.float32).detach().cpu()
 
         for seg_idx in range(len(y_pred)):
             first, last = get_glioma_indices(y_threshed[seg_idx])
@@ -48,15 +50,23 @@ class DistanceLoss(nn.Module):
         a = torch.where(y_true > 0, True, False)
         
         # loss calculation
-        distance_loss = torch.abs(1 - torch.mean(combined[a]))
-        dice_loss = 1 - dice_coefficient(y_pred, y_true)
-        loss = dice_loss + (self.alpha * distance_loss)
+        # distance_loss = torch.abs(1 - torch.mean(combined[a]))
+        distance_loss = torch.abs(torch.mean(1 - combined[a]))
 
-        # print(torch.mean(combined[a]))
-        # print(distance_loss, dice_loss)
-        # loss = combined[a] / len(a)
-        # print(dice_loss.grad_fn)
+        # dice_loss = 1 - dice_coefficient(y_pred, y_true)
+        # loss = dice_loss + (self.alpha * distance_loss)
         
+        # take 2
+        # distance_loss = torch.sum(torch.mul(combined, y_true)) / torch.count_nonzero(y_true)
+        overlap = torch.sum(torch.mul(y_pred, y_true)) / torch.count_nonzero(y_true)
+        loss = overlap + (self.alpha * distance_loss)
+        
+        print(distance_loss.item(), overlap.item())
+        # print(torch.mean(combined[a]))
+        # print(distance_loss.item(), dice_loss.item())
+        # loss = combined[a] / len(a)
+        # print(distance_loss.grad_fn)
+
         return loss
     
 

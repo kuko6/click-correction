@@ -4,14 +4,16 @@ import torch.nn.functional as F
 
 
 def dice_coefficient(y_pred: torch.Tensor, y_true: torch.Tensor, eps=1e-6):
-  """ Computes the dice coeff. for each class by summing over the depth, height, and width """
+    """ Computes the dice coeff. for each class by summing over the depth, height, and width """
+    
+    # sum for each element in batch 
+    intersection = torch.sum(y_pred * y_true, dim=[2, 3, 4])
+    union = torch.sum(y_pred, dim=[2, 3, 4]) + torch.sum(y_true, dim=[2, 3, 4])
+    dice = (2. * intersection + eps) / (union + eps)
+    # print(dice.shape)
 
-  intersection = torch.sum(y_pred * y_true, dim=[2, 3, 4])
-  union = torch.sum(y_pred, dim=[2, 3, 4]) + torch.sum(y_true, dim=[2, 3, 4])
-  dice = (2. * intersection + eps) / (union + eps)
-  # print(dice.shape)
-
-  return dice.mean()
+    # mean for the whole batch
+    return dice.mean()
 
 
 class DiceLoss(nn.Module):

@@ -71,7 +71,7 @@ def preview_clicks(t1_list, t2_list, seg_list, clicks):
     plt.close(fig)
 
 
-def preview(y_pred: torch.Tensor, y: torch.Tensor, dice: torch.Tensor, epoch=0):
+def preview(y_pred: torch.Tensor, y: torch.Tensor, z: torch.Tensor, dice: torch.Tensor, epoch=0):
     """ Saves a png of sample prediction `y_pred` for scan `y` """
 
     # Compute number of slices with the tumour
@@ -88,13 +88,16 @@ def preview(y_pred: torch.Tensor, y: torch.Tensor, dice: torch.Tensor, epoch=0):
     j = 0
     for i in range(first, last):
         if j >= len(axs): break
-        axs[j].imshow(y[0,i,:,:].cpu().detach(), cmap='magma')
+        axs[j].imshow(z[0,i,:,:].cpu().detach(), cmap='magma')
         axs[j].axis('off')
         axs[j].set_title(f'mask slice {i}', fontsize=9)
-        axs[j+1].imshow(y_pred[0,i,:,:].cpu().detach(), cmap='magma')
+        axs[j+1].imshow(y[0,i,:,:].cpu().detach(), cmap='magma')
         axs[j+1].axis('off')
-        axs[j+1].set_title(f'pred slice {i}', fontsize=9)
-        j += 2
+        axs[j+1].set_title(f'mask slice {i}', fontsize=9)
+        axs[j+2].imshow(y_pred[0,i,:,:].cpu().detach(), cmap='magma')
+        axs[j+2].axis('off')
+        axs[j+2].set_title(f'pred slice {i}', fontsize=9)
+        j += 3
     fig.suptitle(f'Dice: {dice.item()}', fontsize=10)
     plt.subplots_adjust(top=0.9)
 

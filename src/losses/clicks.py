@@ -45,23 +45,26 @@ class DistanceLoss(nn.Module):
             if self.thresh_mode == 'max' or self.thresh_val == None:
                 self.thresh_val = torch.max(dst).item()
             combined[seg_idx][combined[seg_idx] > self.thresh_val] = self.thresh_val
-
+        
+        combined.requires_grad_()
+        
         # get the object indices from the annotation
-        a = torch.where(y_true > 0, True, False)
+        # a = torch.where(y_true > 0, True, False)
         
         # loss calculation
         # distance_loss = torch.abs(1 - torch.mean(combined[a]))
-        distance_loss = torch.abs(torch.mean(1 - combined[a]))
+        # distance_loss = torch.abs(torch.mean(1 - combined[a]))
 
-        # dice_loss = 1 - dice_coefficient(y_pred, y_true)
-        # loss = dice_loss + (self.alpha * distance_loss)
+        dice_loss = 1 - dice_coefficient(y_pred, y_true)
+        loss = dice_loss + (self.alpha * distance_loss)
         
         # take 2
-        # distance_loss = torch.sum(torch.mul(combined, y_true)) / torch.count_nonzero(y_true)
-        overlap = torch.sum(torch.mul(y_pred, y_true)) / torch.count_nonzero(y_true)
-        loss = overlap + (self.alpha * distance_loss)
-        
-        print(distance_loss.item(), overlap.item())
+        distance_loss = torch.sum(torch.mul(combined, y_true)) / torch.count_nonzero(y_true)
+        # overlap = torch.sum(torch.mul(y_pred, y_true)) / torch.count_nonzero(y_true)
+        # loss = overlap + (self.alpha * distance_loss)
+        loss = distance_loss
+    
+        # print(distance_loss.item(), overlap.item())
         # print(torch.mean(combined[a]))
         # print(distance_loss.item(), dice_loss.item())
         # loss = combined[a] / len(a)

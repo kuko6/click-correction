@@ -209,8 +209,8 @@ class MRIDataset(Dataset):
                 clicks_num=self.clicks['num'], 
                 click_size=self.clicks['size']
             )
-            # seg = seg.unsqueeze(0)
-            return stacked, clicks
+            seg = seg.unsqueeze(0)
+            return stacked, clicks, seg
         
         seg = seg.unsqueeze(0)
         return stacked, seg

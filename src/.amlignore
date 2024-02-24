@@ -2,4 +2,5 @@
 __pycache__
 
 outputs
-
+models/pretrained_focaltversky_40.pt
+models/pretrained_focaltversky_40_2.pt

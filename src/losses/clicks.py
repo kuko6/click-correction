@@ -26,7 +26,7 @@ class DistanceLoss(nn.Module):
 
         for seg_idx in range(len(y_pred)):
             first, last = get_glioma_indices(y_threshed[seg_idx])
-            
+
             for slice_idx in range(first, last+1):
                 dst = torch.as_tensor(
                     scipy.ndimage.distance_transform_edt(y_threshed[seg_idx,0,slice_idx,:,:]), 
@@ -55,8 +55,8 @@ class DistanceLoss(nn.Module):
         # distance_loss = torch.abs(1 - torch.mean(combined[a]))
         # distance_loss = torch.abs(torch.mean(1 - combined[a]))
 
-        dice_loss = 1 - dice_coefficient(y_pred, y_true)
-        loss = dice_loss + (self.alpha * distance_loss)
+        # dice_loss = 1 - dice_coefficient(y_pred, y_true)
+        # loss = dice_loss + (self.alpha * distance_loss)
         
         # take 2
         distance_loss = torch.sum(torch.mul(combined, y_true)) / torch.count_nonzero(y_true)

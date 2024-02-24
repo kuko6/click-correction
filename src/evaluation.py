@@ -1,24 +1,22 @@
 import argparse
-import sys
-import os
 import glob
-import wandb
 import json
+import os
+import sys
 
-from sklearn.model_selection import train_test_split
 import numpy as np
 import torch
+import wandb
+from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 from torchinfo import summary
 
-from model import Unet
 from data_generator import MRIDataset
-from utils import EarlyStopper, preview, preview_clicks
-
-from losses.dice import dice_coefficient, DiceLoss, DiceBCELoss
-from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss
 from losses.clicks import DistanceLoss
-
+from losses.dice import DiceBCELoss, DiceLoss, dice_coefficient
+from losses.focal_tversky import FocalLoss, FocalTverskyLoss, TverskyLoss
+from model import Unet
+from utils import EarlyStopper, preview, preview_clicks
 
 use_wandb = False
 
@@ -46,7 +44,7 @@ print(f"Training with clicks: {config['clicks']['use']}")
 
 def prepare_data(data_dir: str) -> MRIDataset:
     """ Loads the data from `data_dir` and returns `Dataset` """
-
+         
     t1_list = sorted(glob.glob(os.path.join(data_dir, 'VS-*-*/vs_*/*_t1_*')))
     t2_list = sorted(glob.glob(os.path.join(data_dir, 'VS-*-*/vs_*/*_t2_*')))
     seg_list = sorted(glob.glob(os.path.join(data_dir, 'VS-*-*/vs_*/*_seg_*')))

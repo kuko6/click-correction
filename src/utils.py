@@ -67,7 +67,7 @@ def preview_clicks(t1_list, t2_list, seg_list, clicks):
         # axs[j+4].set_title(f'fg clicks slice {i}', fontsize=9)
         j += 3
 
-    fig.savefig(f'outputs/clicks_preview.png')
+    fig.savefig('outputs/clicks_preview.png')
     plt.close(fig)
 
 

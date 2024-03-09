@@ -113,6 +113,31 @@ def preview(y_pred: torch.Tensor, y: torch.Tensor, dice: torch.Tensor, epoch=0):
     plt.close(fig)
 
 
+def plot_tumour(mask):
+    # Compute number of slices with the tumour
+    first, last = get_glioma_indices(mask)
+    print('Tumour indices: ', first, last)
+
+    length = (last-first+1)
+    n_graphs = (length)//4
+    rows = n_graphs
+    cols = 4
+    res = cols if cols > rows else rows
+
+    # Plot them
+    fig, axs = plt.subplots(rows, cols, figsize=(res*2, res*2))
+    axs = axs.flatten()
+    j = 0
+    for i in range(first, last):
+        if j >= len(axs): break
+        axs[j].imshow(mask[0,i,:,:], cmap='magma')
+        axs[j].axis('off')
+        axs[j].set_title(f'mask slice {i}', fontsize=9)
+        j += 1
+
+    plt.show()    
+
+
 # https://stackoverflow.com/a/73704579
 class EarlyStopper:
     """ Early stopper for training. Supports `'min'` and `'max'` mode.  """

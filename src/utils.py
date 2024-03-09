@@ -91,9 +91,11 @@ def preview(y_pred: torch.Tensor, y: torch.Tensor, z: torch.Tensor, dice: torch.
         axs[j].imshow(z[0,i,:,:].cpu().detach(), cmap='magma')
         axs[j].axis('off')
         axs[j].set_title(f'mask slice {i}', fontsize=9)
+        
         axs[j+1].imshow(y[0,i,:,:].cpu().detach(), cmap='magma')
         axs[j+1].axis('off')
         axs[j+1].set_title(f'mask slice {i}', fontsize=9)
+
         axs[j+2].imshow(y_pred[0,i,:,:].cpu().detach(), cmap='magma')
         axs[j+2].axis('off')
         axs[j+2].set_title(f'pred slice {i}', fontsize=9)

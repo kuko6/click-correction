@@ -1,3 +1,4 @@
+import click
 import nibabel as nib
 import math
 import glob
@@ -84,7 +85,7 @@ class MRIDataset(Dataset):
             erosion_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(3, 3))
             dilatation_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(17, 17))
             eroded_seg = cv2.erode(mask[slice,:,:], kernel=erosion_kernel)
-            dilated_seg = cv2.dilate(mask[slice,:,:,], kernel=dilatation_kernel, iterations=4)
+            dilated_seg = cv2.dilate(mask[slice,:,:], kernel=dilatation_kernel, iterations=4)
 
             diff = mask[slice,:,:] - eroded_seg
             diff2 = dilated_seg - mask[slice,:,:]
@@ -210,6 +211,7 @@ class MRIDataset(Dataset):
                 click_size=self.clicks['size']
             )
             seg = seg.unsqueeze(0)
+            # seg = torch.stack((seg, clicks))
             return stacked, clicks, seg
         
         seg = seg.unsqueeze(0)
@@ -237,10 +239,6 @@ if __name__ == '__main__':
             'size': 1
         }
     )
-    img, label = data[0]
-    print(img.shape, label.shape)
-    print(img.dtype, label.dtype)
-    # print(clicks[1].shape, clicks[1].dtype)
-
-    # seg = torch.as_tensor(nib.load('data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz').get_fdata(), dtype=torch.float32).permute(2, 0, 1)
-    # generate_clicks(seg)
+    img, seg = data[0]
+    print(img.shape, seg.shape)
+    print(img.dtype, seg.dtype)

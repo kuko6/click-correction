@@ -15,7 +15,7 @@ from data_generator import MRIDataset
 from utils import EarlyStopper, preview
 from losses.dice import dice_coefficient, DiceLoss, DiceBCELoss
 from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss
-from losses.clicks import DistanceLoss
+from losses.clicks import DistanceLoss, DistanceLoss2
 
 
 use_wandb = True
@@ -37,13 +37,13 @@ config = {
     'scheduler': True,
     'early_stopper': True,
     'img_dims': (40, 128, 128), # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
-    'training': 'clicks', # base, clicks-pretraining, clicks
+    'training': 'base', # base, clicks-pretraining, clicks
     'clicks': {
         'use': True,
         'gen_fg': False,
         'gen_bg': False,
         'gen_border': True,
-        'num': 20,
+        'num': 10,
         'size': 1
     }
 }
@@ -311,7 +311,8 @@ def main():
         'focal': FocalLoss(alpha=weight, gamma=2),
         'tversky': TverskyLoss(alpha=.3, beta=.7),
         'focaltversky': FocalTverskyLoss(alpha=.3, beta=.7, gamma=.75),
-        'distance': DistanceLoss(thresh_val=10.0, probs=True, preds_threshold=0.7)
+        'distance': DistanceLoss2(thresh_val=10.0, probs=True, preds_threshold=0.7),
+        # 'distance': DistanceLoss(thresh_val=10.0, probs=True, preds_threshold=0.7)
     }
 
     loss_fn = loss_functions[config['loss']]

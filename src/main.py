@@ -1,6 +1,7 @@
 import argparse
 import os
 import glob
+from sympy import false
 import wandb
 import json
 
@@ -91,24 +92,26 @@ def val(dataloader: DataLoader, model: Unet, loss_fn: torch.nn.Module, epoch: in
     model.eval()
     avg_loss, avg_dice = 0, 0
     with torch.no_grad():
-        for i, (x, y, z) in enumerate(dataloader):
-            x, y, z = x.to(device), y.to(device), z.to(device)
+        for i, (x, y) in enumerate(dataloader):
+            x, y = x.to(device), y.to(device)
             y_pred = model(x)
 
-            # Compute loss
-            # combined = get_dst_map(y_pred, thresh_val=10.0, probs=True, preds_threshold=0.7)
-            # loss = loss_fn(y_pred, y, combined)
-            loss = loss_fn(y_pred, y)
-            avg_loss += loss.item()
+            # Compute loss and dice coefficient
+            if config['clicks']['use']:
+                loss = loss_fn(y_pred, y[:,1].unsqueeze(1)).item()
+                dice = dice_coefficient(y_pred, y[:,0].unsqueeze(1)).item()
+            else:
+                loss = loss_fn(y_pred, y)
+                dice = dice_coefficient(y_pred, y)
 
-            # Compute the dice coefficient
-            dice = dice_coefficient(y_pred, z).item()
+            avg_loss += loss
             avg_dice += dice
 
-            print(f'validation step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice:>5f}', end='\r')
+            print(f'validation step: {i+1}/{len(dataloader)}, loss: {loss:>5f}, dice: {dice:>5f}', end='\r')
 
             if i==0:
-              preview(y_pred[0], y[0], z[0], dice_coefficient(y_pred, z), epoch)
+                # preview(y_pred[0], y[0], dice_coefficient(y_pred, y), epoch)
+                preview(y_pred[0], y[0], dice, epoch)
 
     avg_loss /= len(dataloader)
     avg_dice /= len(dataloader)
@@ -123,22 +126,23 @@ def train_one_epoch(dataloader: DataLoader, model: Unet, loss_fn, optimizer, epo
   model.train()
   avg_loss, avg_dice = 0, 0
 
-  for i, (x, y, z) in enumerate(dataloader):
-    x, y, z = x.to(device), y.to(device), z.to(device)
+  for i, (x, y) in enumerate(dataloader):
+    x, y = x.to(device), y.to(device)
     optimizer.zero_grad()
 
     # Get prediction
     y_pred = model(x)
 
-    # Compute loss
-    # combined = get_dst_map(y_pred, thresh_val=10.0, probs=True, preds_threshold=0.7)
-    # loss = loss_fn(y_pred, y, combined)
-    loss = loss_fn(y_pred, y)
-    avg_loss += loss.item()
+    # Compute loss and dice coefficient
+    if config['clicks']['use']:
+        loss = loss_fn(y_pred, y[:,1].unsqueeze(1))
+        dice = dice_coefficient(y_pred, y[:,0].unsqueeze(1))
+    else:
+        loss = loss_fn(y_pred, y)
+        dice = dice_coefficient(y_pred, y)
 
-    # Compute the dice coefficient
-    dice = dice_coefficient(y_pred, z).item()
-    avg_dice += dice
+    avg_loss += loss.item()
+    avg_dice += dice.item()
 
     # Update parameters
     loss.backward()
@@ -252,6 +256,9 @@ def main():
         print('You need to specify datapath!!!! >:(')
         return
 
+    if not args.wandb:
+        use_wandb = False
+    
     wandb_key = args.wandb
     if use_wandb and wandb_key:
         wandb.login(key=wandb_key)

@@ -12,6 +12,8 @@ import torchvision.transforms as transforms
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 
+# from utils import preview
+
 # from utils import generate_clicks
 
 def min_max_normalise(image: torch.Tensor) -> torch.Tensor:
@@ -125,8 +127,8 @@ class MRIDataset(Dataset):
                     fg_clicks[slice,c[0], c[1]] = 1
         
         if border: 
-            # return torch.as_tensor(border_clicks)
-            return torch.as_tensor(border_clicks).unsqueeze(0)
+            return torch.as_tensor(border_clicks)
+            # return torch.as_tensor(border_clicks).unsqueeze(0)
         
         return torch.stack((torch.as_tensor(bg_clicks), torch.as_tensor(fg_clicks)), axis=0)
 
@@ -210,9 +212,10 @@ class MRIDataset(Dataset):
                 clicks_num=self.clicks['num'], 
                 click_size=self.clicks['size']
             )
-            seg = seg.unsqueeze(0)
-            # seg = torch.stack((seg, clicks))
-            return stacked, clicks, seg
+            # seg = seg.unsqueeze(0)
+            # return stacked, clicks, seg
+            seg = torch.stack((seg, clicks))
+            return stacked, seg
         
         seg = seg.unsqueeze(0)
         return stacked, seg
@@ -231,7 +234,7 @@ if __name__ == '__main__':
         ['data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz'], 
         (40, 80, 80),
         clicks = {
-            'use': True,
+            'use': False,
             'gen_fg': False,
             'gen_bg': False,
             'gen_border': True,
@@ -242,3 +245,5 @@ if __name__ == '__main__':
     img, seg = data[0]
     print(img.shape, seg.shape)
     print(img.dtype, seg.dtype)
+
+    # preview(img, seg, torch.tensor(0.213), 100)

@@ -1,6 +1,4 @@
-import click
 import nibabel as nib
-import math
 import glob
 import os
 import cv2
@@ -8,7 +6,6 @@ import numpy as np
 
 import torch
 from torch.utils.data import Dataset
-import torchvision.transforms as transforms
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 

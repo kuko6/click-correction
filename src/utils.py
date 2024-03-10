@@ -1,7 +1,7 @@
-import cv2
+# import cv2
 import torch
 import numpy as np
-import nibabel as nib
+# import nibabel as nib
 import matplotlib.pyplot as plt
 
 # from data_generator import MRIDataset
@@ -88,7 +88,8 @@ def preview(y_pred: torch.Tensor, y: torch.Tensor, dice: torch.Tensor, epoch=0):
     axs = axs.flatten()
     j = 0
     for i in range(first, last):
-        if j >= len(axs): break
+        if j >= len(axs): 
+            break
 
         axs[j].imshow(y[0,i,:,:].cpu().detach(), cmap='magma')
         axs[j].axis('off')
@@ -129,7 +130,8 @@ def plot_tumour(mask):
     axs = axs.flatten()
     j = 0
     for i in range(first, last):
-        if j >= len(axs): break
+        if j >= len(axs): 
+            break
         axs[j].imshow(mask[0,i,:,:], cmap='magma')
         axs[j].axis('off')
         axs[j].set_title(f'mask slice {i}', fontsize=9)

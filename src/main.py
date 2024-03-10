@@ -1,7 +1,6 @@
 import argparse
 import os
 import glob
-from sympy import false
 import wandb
 import json
 
@@ -32,7 +31,7 @@ config = {
     'dataset': 'Schwannoma',
     'epochs': 40,
     'batch_size': 2,
-    'loss': 'distance', 
+    'loss': 'distance2', 
     'optimizer': 'Adam',
     'augment': False,
     'scheduler': True,
@@ -98,20 +97,20 @@ def val(dataloader: DataLoader, model: Unet, loss_fn: torch.nn.Module, epoch: in
 
             # Compute loss and dice coefficient
             if config['clicks']['use']:
-                loss = loss_fn(y_pred, y[:,1].unsqueeze(1)).item()
-                dice = dice_coefficient(y_pred, y[:,0].unsqueeze(1)).item()
+                loss = loss_fn(y_pred, y[:,1].unsqueeze(1))
+                dice = dice_coefficient(y_pred, y[:,0].unsqueeze(1))
             else:
                 loss = loss_fn(y_pred, y)
                 dice = dice_coefficient(y_pred, y)
 
-            avg_loss += loss
-            avg_dice += dice
+            avg_loss += loss.item()
+            avg_dice += dice.item()
 
-            print(f'validation step: {i+1}/{len(dataloader)}, loss: {loss:>5f}, dice: {dice:>5f}', end='\r')
+            print(f'validation step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}', end='\r')
 
             if i==0:
                 # preview(y_pred[0], y[0], dice_coefficient(y_pred, y), epoch)
-                preview(y_pred[0], y[0], dice, epoch)
+                preview(y_pred[0], y[0], dice.item(), epoch)
 
     avg_loss /= len(dataloader)
     avg_dice /= len(dataloader)
@@ -148,7 +147,7 @@ def train_one_epoch(dataloader: DataLoader, model: Unet, loss_fn, optimizer, epo
     loss.backward()
     optimizer.step()
 
-    print(f'training step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice:>5f}', end='\r')
+    print(f'training step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}', end='\r')
 
   avg_loss /= len(dataloader)
   avg_dice /= len(dataloader)
@@ -255,9 +254,6 @@ def main():
     if not args.data_path:
         print('You need to specify datapath!!!! >:(')
         return
-
-    if not args.wandb:
-        use_wandb = False
     
     wandb_key = args.wandb
     if use_wandb and wandb_key:
@@ -318,8 +314,8 @@ def main():
         'focal': FocalLoss(alpha=weight, gamma=2),
         'tversky': TverskyLoss(alpha=.3, beta=.7),
         'focaltversky': FocalTverskyLoss(alpha=.3, beta=.7, gamma=.75),
-        'distance': DistanceLoss2(thresh_val=10.0, probs=True, preds_threshold=0.7),
-        # 'distance': DistanceLoss(thresh_val=10.0, probs=True, preds_threshold=0.7)
+        'distance': DistanceLoss(thresh_val=10.0, probs=True, preds_threshold=0.7),
+        'distance2': DistanceLoss2(thresh_val=10.0, probs=True, preds_threshold=0.7)
     }
 
     loss_fn = loss_functions[config['loss']]

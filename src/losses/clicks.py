@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import scipy
-from losses.dice import dice_coefficient
+# from losses.dice import dice_coefficient
 from utils import get_glioma_indices
 from kornia.contrib import distance_transform as kornia_dst
 

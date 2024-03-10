@@ -1,5 +1,4 @@
 import argparse
-import sys
 import os
 import glob
 import wandb
@@ -13,10 +12,10 @@ from torchinfo import summary
 
 from model import Unet
 from data_generator import MRIDataset
-from utils import EarlyStopper, preview, preview_clicks
-
+from utils import EarlyStopper, preview
 from losses.dice import dice_coefficient, DiceLoss, DiceBCELoss
 from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss
+from losses.clicks import DistanceLoss, DistanceLoss2
 
 
 use_wandb = True
@@ -25,25 +24,27 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f'[Using {device} device]')
 
 config = {
-    "lr": 1e-3,
-    "img_channels": 2,
-    "num_classes": 1,
-    "conv_blocks": 3, # 3 if device == 'cpu' else 4
-    "dataset": "Schwannoma",
-    "epochs": 50,
-    "batch_size": 2,
-    "loss": "focaltversky", 
-    "optimizer": "Adam",
-    "augment": False,
-    "scheduler": True,
-    "training": "base", # base, clicks-pretraining, clicks
-    "img_dims": (40, 128, 128), # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
-    "clicks": {
-        "use": False,
-        "gen_fg": True,
-        "gen_bg": False,
-        "num": 20,
-        "size": 1
+    'lr': 1e-3,
+    'img_channels': 2,
+    'num_classes': 1,
+    'conv_blocks': 3, # 3 if device == 'cpu' else 4
+    'dataset': 'Schwannoma',
+    'epochs': 40,
+    'batch_size': 2,
+    'loss': 'distance2', 
+    'optimizer': 'Adam',
+    'augment': False,
+    'scheduler': True,
+    'early_stopper': True,
+    'img_dims': (40, 128, 128), # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
+    'training': 'base', # base, clicks-pretraining, clicks
+    'clicks': {
+        'use': True,
+        'gen_fg': False,
+        'gen_bg': False,
+        'gen_border': True,
+        'num': 10,
+        'size': 1
     }
 }
 
@@ -59,17 +60,21 @@ def prepare_data(data_dir: str) -> MRIDataset:
     t2_val.append(t2_train.pop(-1))
     seg_val.append(seg_train.pop(-1))
 
-    if config['clicks']['use']:
-        preview_clicks(t1_list, t2_list, seg_list, config['clicks'])
+    # if config['clicks']['use']:
+    #     preview_clicks(t1_list, t2_list, seg_list, config['clicks'])
     
     if config['training'] == 'base':
         train_data = MRIDataset(t1_train, t2_train, seg_train, config['img_dims'], clicks=config['clicks'])
-    elif config['training'] == 'clicks-pretraining':
-        train_data = MRIDataset(t1_train[40:], t2_train[40:], seg_train[40:], config['img_dims'], clicks=config['clicks'])
+        val_data = MRIDataset(t1_val, t2_val, seg_val, config['img_dims'], clicks=config['clicks'])
     elif config['training'] == 'clicks':
-        train_data = MRIDataset(t1_train[:40], t2_train[:40], seg_train[:40], config['img_dims'], clicks=config['clicks'])
-    val_data = MRIDataset(t1_val, t2_val, seg_val, config['img_dims'])
-  
+        train_data = MRIDataset(t1_train[30:], t2_train[30:], seg_train[30:], config['img_dims'], clicks=config['clicks'])
+        val_data = MRIDataset(t1_val[10:], t2_val[10:], seg_val[10:], config['img_dims'], clicks=config['clicks'])
+        # train_data = MRIDataset(t1_train, t2_train, seg_train, config['img_dims'], clicks=config['clicks'])
+        # val_data = MRIDataset(t1_val, t2_val, seg_val, config['img_dims'])
+    elif config['training'] == 'clicks-pretraining':
+        train_data = MRIDataset(t1_train[:30], t2_train[:30], seg_train[:30], config['img_dims'], clicks=False)
+        val_data = MRIDataset(t1_val[:10], t2_val[:10], seg_val[:10], config['img_dims'])
+    
     print(len(train_data), len(val_data))
     # print(len(t1_train), len(t2_train), len(seg_train))
     # print(len(t1_val), len(t2_val), len(seg_val))
@@ -90,18 +95,22 @@ def val(dataloader: DataLoader, model: Unet, loss_fn: torch.nn.Module, epoch: in
             x, y = x.to(device), y.to(device)
             y_pred = model(x)
 
-            # Compute loss
-            loss = loss_fn(y_pred, y)
+            # Compute loss and dice coefficient
+            if config['clicks']['use']:
+                loss = loss_fn(y_pred, y[:,1].unsqueeze(1))
+                dice = dice_coefficient(y_pred, y[:,0].unsqueeze(1))
+            else:
+                loss = loss_fn(y_pred, y)
+                dice = dice_coefficient(y_pred, y)
+
             avg_loss += loss.item()
+            avg_dice += dice.item()
 
-            # Compute the dice coefficient
-            dice = dice_coefficient(y_pred, y).item()
-            avg_dice += dice
-
-            print(f'validation step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice:>5f}', end='\r')
+            print(f'validation step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}', end='\r')
 
             if i==0:
-              preview(y_pred[0], y[0], dice_coefficient(y_pred, y), epoch)
+                # preview(y_pred[0], y[0], dice_coefficient(y_pred, y), epoch)
+                preview(y_pred[0], y[0], dice.item(), epoch)
 
     avg_loss /= len(dataloader)
     avg_dice /= len(dataloader)
@@ -123,19 +132,22 @@ def train_one_epoch(dataloader: DataLoader, model: Unet, loss_fn, optimizer, epo
     # Get prediction
     y_pred = model(x)
 
-    # Compute loss
-    loss = loss_fn(y_pred, y)
-    avg_loss += loss.item()
+    # Compute loss and dice coefficient
+    if config['clicks']['use']:
+        loss = loss_fn(y_pred, y[:,1].unsqueeze(1))
+        dice = dice_coefficient(y_pred, y[:,0].unsqueeze(1))
+    else:
+        loss = loss_fn(y_pred, y)
+        dice = dice_coefficient(y_pred, y)
 
-    # Compute the dice coefficient
-    dice = dice_coefficient(y_pred, y).item()
-    avg_dice += dice
+    avg_loss += loss.item()
+    avg_dice += dice.item()
 
     # Update parameters
     loss.backward()
     optimizer.step()
 
-    print(f'training step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice:>5f}', end='\r')
+    print(f'training step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}', end='\r')
 
   avg_loss /= len(dataloader)
   avg_dice /= len(dataloader)
@@ -152,7 +164,8 @@ def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet,
     val_history = {'loss': [], 'dice': []}
     best = {'loss': np.inf, 'dice': 0, 'epoch': 0}
 
-    early_stopper = EarlyStopper(patience=6, delta=0.01, mode='max')
+    if config['early_stopper']:
+        early_stopper = EarlyStopper(patience=6, delta=0.01, mode='max')
 
     for epoch in range(epochs):
         print('===============================')
@@ -212,10 +225,11 @@ def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet,
         if config['scheduler']:
             scheduler.step(val_loss)
 
-        if early_stopper(val_dice):
-            print('===============================')
-            print('Stopping early!!!')
-            break
+        if config['early_stopper']:
+            if early_stopper(val_dice):
+                print('===============================')
+                print('Stopping early!!!')
+                break
     
     print('===============================')
     print(f'The best model was in epoch {best["epoch"]} with loss: {best["loss"]:>5f} and dice: {best["dice"]:>5f}')
@@ -224,7 +238,6 @@ def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet,
         artifact = wandb.Artifact('best_model', type='model', metadata={'val_dice': val_dice})
         artifact.add_file('outputs/best.pt')
         wandb.run.log_artifact(artifact)
-        
         wandb.finish()
 
 
@@ -240,11 +253,12 @@ def main():
 
     if not args.data_path:
         print('You need to specify datapath!!!! >:(')
-
+        return
+    
     wandb_key = args.wandb
     if use_wandb and wandb_key:
         wandb.login(key=wandb_key)
-        wandb.init(project='DP', entity='kuko', reinit=True, config=config)    
+        wandb.init(project='DP', entity='kuko', reinit=True, config=config)
 
     data_dir = args.data_path
     print(os.listdir(data_dir))
@@ -258,7 +272,12 @@ def main():
     train_dataloader, val_dataloader = prepare_data(data_dir)
 
     # Initialize model
-    model = Unet(in_channels=config['img_channels'], out_channels=config['num_classes'], blocks=config['conv_blocks']).to(device)
+    model = Unet(
+        in_channels=config['img_channels'], 
+        out_channels=config['num_classes'], 
+        blocks=config['conv_blocks']
+    ).to(device)
+
     # writes model architecture to a file (just for experiment logging)
     with open('outputs/architecture.txt', 'w') as f:
         model_summary = summary(
@@ -277,7 +296,8 @@ def main():
     
     # Load pretrained model
     if args.model_path and config['training'] == 'clicks':
-        checkpoint = torch.load(args.model_path, map_location='cuda:0')
+        print('Using pretrained model')
+        checkpoint = torch.load(args.model_path, map_location=device)
         model.load_state_dict(checkpoint['model_state'])
         optimizer.load_state_dict(checkpoint['optimizer_state'])
 
@@ -293,7 +313,9 @@ def main():
         'dicebce': DiceBCELoss(weight=weight),
         'focal': FocalLoss(alpha=weight, gamma=2),
         'tversky': TverskyLoss(alpha=.3, beta=.7),
-        'focaltversky': FocalTverskyLoss(alpha=.3, beta=.7, gamma=.75)
+        'focaltversky': FocalTverskyLoss(alpha=.3, beta=.7, gamma=.75),
+        'distance': DistanceLoss(thresh_val=10.0, probs=True, preds_threshold=0.7),
+        'distance2': DistanceLoss2(thresh_val=10.0, probs=True, preds_threshold=0.7)
     }
 
     loss_fn = loss_functions[config['loss']]

@@ -31,7 +31,14 @@ def min_max_normalise(image: torch.Tensor) -> torch.Tensor:
 class MRIDataset(Dataset):
     """ Torch Dataset which returns the stacked sequences and encoded mask. """
     
-    def __init__(self, t1_list: tuple[str], t2_list: tuple[str], seg_list: tuple[str], img_dims: tuple[int], clicks = None):
+    def __init__(
+        self,
+        t1_list: tuple[str],
+        t2_list: tuple[str],
+        seg_list: tuple[str],
+        img_dims: tuple[int],
+        clicks=None,
+    ):
         self.t1_list = t1_list
         self.t2_list = t2_list
         self.seg_list = seg_list
@@ -49,7 +56,7 @@ class MRIDataset(Dataset):
 
         return first, last
     
-    def _select_points(self, coords, n, d=4):
+    def _select_points(self, coords, n, d):
         valid_points = []
         valid_points.append(coords[0])
         
@@ -71,7 +78,15 @@ class MRIDataset(Dataset):
         
         return valid_points
         
-    def _generate_clicks(self, mask: torch.Tensor, fg=False, bg=False, border=False, clicks_num=2, click_size=2) -> tuple[torch.Tensor, torch.Tensor]:
+    def _generate_clicks(
+        self,
+        mask: torch.Tensor,
+        fg=False,
+        bg=False,
+        border=False,
+        clicks_num=2,
+        clicks_dst=4
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         """ Generate click masks """
 
         first, last = self._get_glioma_indices(mask)
@@ -107,19 +122,19 @@ class MRIDataset(Dataset):
 
             # Add border clicks
             if border:
-                selected_points = self._select_points(np.array(border_coords), clicks_num)
+                selected_points = self._select_points(np.array(border_coords), clicks_num, clicks_dst)
                 for c in selected_points:
                     border_clicks[slice,c[0], c[1]] = 1
 
             # Add bg clicks
             if bg:
-                selected_points = self._select_points(np.array(outer_coords), clicks_num)
+                selected_points = self._select_points(np.array(outer_coords), clicks_num, clicks_dst)
                 for c in selected_points:
                     bg_clicks[slice,c[0], c[1]] = 1
 
             # Add fg clicks
             if fg:
-                selected_points = self._select_points(np.array(inner_coords), clicks_num)
+                selected_points = self._select_points(np.array(inner_coords), clicks_num, clicks_dst)
                 for c in selected_points:
                     fg_clicks[slice,c[0], c[1]] = 1
         
@@ -207,7 +222,7 @@ class MRIDataset(Dataset):
                 bg=self.clicks['gen_bg'], 
                 border=self.clicks['gen_border'], 
                 clicks_num=self.clicks['num'], 
-                click_size=self.clicks['size']
+                clicks_dst=self.clicks.get('dst') or 4
             )
             # seg = seg.unsqueeze(0)
             # return stacked, clicks, seg
@@ -231,12 +246,11 @@ if __name__ == '__main__':
         ['data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz'], 
         (40, 80, 80),
         clicks = {
-            'use': False,
+            'use': True,
             'gen_fg': False,
             'gen_bg': False,
             'gen_border': True,
             'num': 20,
-            'size': 1
         }
     )
     img, seg = data[0]

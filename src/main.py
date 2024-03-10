@@ -44,7 +44,7 @@ config = {
         'gen_bg': False,
         'gen_border': True,
         'num': 10,
-        'size': 1
+        'dst': 4
     }
 }
 

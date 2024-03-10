@@ -27,6 +27,7 @@ class DistanceLoss(nn.Module):
             first, last = get_glioma_indices(y_threshed[seg_idx])
 
             # iterate over slices in segmentation
+            # this might be wrong
             for slice_idx in range(first, last+1):
                 dst = torch.as_tensor(
                     scipy.ndimage.distance_transform_edt(y_threshed[seg_idx,0,slice_idx,:,:]), 

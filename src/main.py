@@ -31,15 +31,15 @@ config = {
     'dataset': 'Schwannoma',
     'epochs': 40,
     'batch_size': 2,
-    'loss': 'distance2', 
+    'loss': 'dice', 
     'optimizer': 'Adam',
     'augment': False,
     'scheduler': True,
     'early_stopper': True,
     'img_dims': (40, 128, 128), # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
-    'training': 'base', # base, clicks-pretraining, clicks
+    'training': 'clicks-pretraining', # base, clicks-pretraining, clicks
     'clicks': {
-        'use': True,
+        'use': False,
         'gen_fg': False,
         'gen_bg': False,
         'gen_border': True,
@@ -63,6 +63,7 @@ def prepare_data(data_dir: str) -> MRIDataset:
     # if config['clicks']['use']:
     #     preview_clicks(t1_list, t2_list, seg_list, config['clicks'])
     
+    # TODO: redo this part so the number of files can be set in config
     if config['training'] == 'base':
         train_data = MRIDataset(t1_train, t2_train, seg_train, config['img_dims'], clicks=config['clicks'])
         val_data = MRIDataset(t1_val, t2_val, seg_val, config['img_dims'], clicks=config['clicks'])
@@ -72,7 +73,7 @@ def prepare_data(data_dir: str) -> MRIDataset:
         # train_data = MRIDataset(t1_train, t2_train, seg_train, config['img_dims'], clicks=config['clicks'])
         # val_data = MRIDataset(t1_val, t2_val, seg_val, config['img_dims'])
     elif config['training'] == 'clicks-pretraining':
-        train_data = MRIDataset(t1_train[:30], t2_train[:30], seg_train[:30], config['img_dims'], clicks=False)
+        train_data = MRIDataset(t1_train[:20], t2_train[:20], seg_train[:20], config['img_dims'], clicks=False)
         val_data = MRIDataset(t1_val[:10], t2_val[:10], seg_val[:10], config['img_dims'])
     
     print(len(train_data), len(val_data))
@@ -81,6 +82,20 @@ def prepare_data(data_dir: str) -> MRIDataset:
 
     train_dataloader = DataLoader(train_data, batch_size=config['batch_size'], shuffle=True)
     val_dataloader = DataLoader(val_data, batch_size=config['batch_size'], shuffle=False)
+
+    np.savetxt(
+        "outputs/training_files.csv", 
+        [('t1', 't2', 't3')]+list(zip(t1_train, t2_train, seg_train)), 
+        delimiter =", ", 
+        fmt ='% s'
+    )
+
+    np.savetxt(
+        "outputs/validation_files.csv", 
+        [('t1', 't2', 't3')]+list(zip(t1_val, t2_val, seg_val)), 
+        delimiter =", ", 
+        fmt ='% s'
+    )
 
     return train_dataloader, val_dataloader
 

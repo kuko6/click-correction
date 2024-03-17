@@ -9,11 +9,7 @@ from torch.utils.data import Dataset
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 
-# from utils import preview
-
-# from utils import generate_clicks
-
-def min_max_normalise(image: torch.Tensor) -> torch.Tensor:
+def _min_max_normalise(image: torch.Tensor) -> torch.Tensor:
     """ 
     Basic min-max scaler. \n
     https://arxiv.org/abs/2011.01045
@@ -26,6 +22,120 @@ def min_max_normalise(image: torch.Tensor) -> torch.Tensor:
     image = (image - min_) / scale
     
     return image
+
+
+def _get_glioma_indices(mask: torch.Tensor) -> tuple[int, int]:
+    """ Returns the first and last slice indices of the tumour in given mask """
+    
+    first = torch.nonzero((mask == 1))[:,0][0].item()
+    last = torch.nonzero((mask == 1))[:,0][-1].item()
+
+    return first, last
+
+
+def _select_points(coords, n: int, d: int) -> list:
+    valid_points = []
+    valid_points.append(coords[0])
+    
+    i = 1
+    while n != len(valid_points) and i < len(coords):
+        new_point = coords[i]
+
+        valid = True
+        for p in valid_points:
+            dist = np.linalg.norm(p - new_point)
+            if dist < d:
+                valid = False
+                break
+
+        if valid:
+            valid_points.append(new_point)
+        
+        i += 1
+    
+    return valid_points
+    
+
+def _generate_clicks(
+    mask: torch.Tensor,
+    fg=False,
+    bg=False,
+    border=False,
+    clicks_num=2,
+    clicks_dst=4
+) -> torch.Tensor:
+    """ Generate click masks """
+
+    first, last = _get_glioma_indices(mask)
+    mask = mask.numpy()
+
+    bg_clicks = np.zeros_like(mask)
+    fg_clicks = np.zeros_like(mask)
+    border_clicks = np.zeros_like(mask)
+    for slice in range(first, last):
+        erosion_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(3, 3))
+        dilatation_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(17, 17))
+        eroded_seg = cv2.erode(mask[slice,:,:], kernel=erosion_kernel)
+        dilated_seg = cv2.dilate(mask[slice,:,:], kernel=dilatation_kernel, iterations=4)
+
+        diff = mask[slice,:,:] - eroded_seg
+        diff2 = dilated_seg - mask[slice,:,:]
+
+        border_idx = np.where(diff == 1)
+        border_coords = list(zip(*border_idx))
+        np.random.shuffle(border_coords)
+        
+        # Get fg coordinates
+        inner_idx = np.where(mask[slice,:,:] == 1)
+        inner_coords = list(zip(*inner_idx))
+        inner_coords = list(set(inner_coords) - set(border_coords))
+        np.random.shuffle(inner_coords)
+        
+        # Get bg coordinates
+        outer_idx = np.where(diff2 == 1)
+        outer_coords = list(zip(*outer_idx))
+        outer_coords = list(set(outer_coords) - set(inner_coords))
+        np.random.shuffle(outer_coords)
+
+        # Add border clicks
+        if border:
+            selected_points = _select_points(np.array(border_coords), clicks_num, clicks_dst)
+            for c in selected_points:
+                border_clicks[slice,c[0], c[1]] = 1
+
+        # Add bg clicks
+        if bg:
+            selected_points = _select_points(np.array(outer_coords), clicks_num, clicks_dst)
+            for c in selected_points:
+                bg_clicks[slice,c[0], c[1]] = 1
+
+        # Add fg clicks
+        if fg:
+            selected_points = _select_points(np.array(inner_coords), clicks_num, clicks_dst)
+            for c in selected_points:
+                fg_clicks[slice,c[0], c[1]] = 1
+    
+    if border: 
+        return torch.as_tensor(border_clicks)
+        # return torch.as_tensor(border_clicks).unsqueeze(0)
+    return torch.stack((torch.as_tensor(bg_clicks), torch.as_tensor(fg_clicks)), axis=0)
+
+
+def _get_new_depth(mask: torch.Tensor, img_dims: tuple[int]) -> tuple[int, int]:
+    """ Calculates new (start, end indices) based on the position of the tumour """
+    
+    first, last = _get_glioma_indices(mask)
+
+    # new starting position will be 0, when the tumour starts low enough or 
+    # couple slices bellow the first index so the tumour isnt in the first few
+    # slices of the new volume
+    start_index = max(first - (img_dims[0] // 2), 0)
+    
+    # new end position is calculated so the final dimensions match with 
+    # the requested ones in `self.img_dims`
+    end_index = start_index + img_dims[0]
+    
+    return start_index, end_index
 
 
 class MRIDataset(Dataset):
@@ -48,118 +158,6 @@ class MRIDataset(Dataset):
     def __len__(self):
         return len(self.t1_list)
     
-    def _get_glioma_indices(self, mask: torch.Tensor) -> tuple[int, int]:
-        """ Returns the first and last slice indices of the tumour in given mask """
-        
-        first = torch.nonzero((mask == 1))[:,0][0].item()
-        last = torch.nonzero((mask == 1))[:,0][-1].item()
-
-        return first, last
-    
-    def _select_points(self, coords, n, d):
-        valid_points = []
-        valid_points.append(coords[0])
-        
-        i = 1
-        while n != len(valid_points) and i < len(coords):
-            new_point = coords[i]
-
-            valid = True
-            for p in valid_points:
-                dist = np.linalg.norm(p - new_point)
-                if dist < d:
-                    valid = False
-                    break
-
-            if valid:
-                valid_points.append(new_point)
-            
-            i += 1
-        
-        return valid_points
-        
-    def _generate_clicks(
-        self,
-        mask: torch.Tensor,
-        fg=False,
-        bg=False,
-        border=False,
-        clicks_num=2,
-        clicks_dst=4
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """ Generate click masks """
-
-        first, last = self._get_glioma_indices(mask)
-        mask = mask.numpy()
-
-        bg_clicks = np.zeros_like(mask)
-        fg_clicks = np.zeros_like(mask)
-        border_clicks = np.zeros_like(mask)
-        for slice in range(first, last):
-            erosion_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(3, 3))
-            dilatation_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(17, 17))
-            eroded_seg = cv2.erode(mask[slice,:,:], kernel=erosion_kernel)
-            dilated_seg = cv2.dilate(mask[slice,:,:], kernel=dilatation_kernel, iterations=4)
-
-            diff = mask[slice,:,:] - eroded_seg
-            diff2 = dilated_seg - mask[slice,:,:]
-
-            border_idx = np.where(diff == 1)
-            border_coords = list(zip(*border_idx))
-            np.random.shuffle(border_coords)
-            
-            # Get fg coordinates
-            inner_idx = np.where(mask[slice,:,:] == 1)
-            inner_coords = list(zip(*inner_idx))
-            inner_coords = list(set(inner_coords) - set(border_coords))
-            np.random.shuffle(inner_coords)
-            
-            # Get bg coordinates
-            outer_idx = np.where(diff2 == 1)
-            outer_coords = list(zip(*outer_idx))
-            outer_coords = list(set(outer_coords) - set(inner_coords))
-            np.random.shuffle(outer_coords)
-
-            # Add border clicks
-            if border:
-                selected_points = self._select_points(np.array(border_coords), clicks_num, clicks_dst)
-                for c in selected_points:
-                    border_clicks[slice,c[0], c[1]] = 1
-
-            # Add bg clicks
-            if bg:
-                selected_points = self._select_points(np.array(outer_coords), clicks_num, clicks_dst)
-                for c in selected_points:
-                    bg_clicks[slice,c[0], c[1]] = 1
-
-            # Add fg clicks
-            if fg:
-                selected_points = self._select_points(np.array(inner_coords), clicks_num, clicks_dst)
-                for c in selected_points:
-                    fg_clicks[slice,c[0], c[1]] = 1
-        
-        if border: 
-            return torch.as_tensor(border_clicks)
-            # return torch.as_tensor(border_clicks).unsqueeze(0)
-        
-        return torch.stack((torch.as_tensor(bg_clicks), torch.as_tensor(fg_clicks)), axis=0)
-
-    def _get_new_depth(self, mask: torch.Tensor):
-        """ Calculates new (start, end indices) based on the position of the tumour """
-        
-        first, last = self._get_glioma_indices(mask)
-
-        # new starting position will be 0, when the tumour starts low enough or 
-        # couple slices bellow the first index so the tumour isnt in the first few
-        # slices of the new volume
-        start_index = max(first - (self.img_dims[0] // 2), 0)
-        
-        # new end position is calculated so the final dimensions match with 
-        # the requested ones in `self.img_dims`
-        end_index = start_index + self.img_dims[0]
-        
-        return start_index, end_index
-    
     def _normalise(self, volume: torch.Tensor) -> torch.Tensor:    
         """ Normalise given volume """
         # mean = torch.mean(volume, dim=(0, 1, 2), keepdim=True)
@@ -167,9 +165,9 @@ class MRIDataset(Dataset):
         # return (volume - mean) / sd
         # return irm_min_max_preprocess(volume)
         
-        return min_max_normalise(volume)
+        return _min_max_normalise(volume)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, None | torch.Tensor]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Load the data and run the whole preprocessing pipeline. \n
         Returns the stacked sequences and encoded mask.
@@ -193,12 +191,12 @@ class MRIDataset(Dataset):
 
         # Crop the depth of the volumes when they have bigger depth than required
         if t1.shape[0] > self.img_dims[0]:
-            start_index, end_index = self._get_new_depth(seg)
+            start_index, end_index = _get_new_depth(seg, self.img_dims)
             t1 = t1[start_index:end_index,:,:]
             t2 = t2[start_index:end_index,:,:]
             seg = seg[start_index:end_index,:,:]
         
-        # When the depth is smaller than required fill the difference with zeros     
+        # When the depth is smaller than required, fill the difference with zeros     
         elif t1.shape[0] < self.img_dims[0]:
             pad = (0, 0, 0, 0, (self.img_dims[0]-t1.shape[0])//2, (self.img_dims[0]-t1.shape[0])//2)
             t1 = F.pad(t1, pad, "constant", 0)
@@ -216,7 +214,7 @@ class MRIDataset(Dataset):
         stacked = torch.stack((t1, t2), axis=0)
 
         if self.clicks and self.clicks['use']:
-            clicks = self._generate_clicks(
+            clicks = _generate_clicks(
                 seg, 
                 fg=self.clicks['gen_fg'], 
                 bg=self.clicks['gen_bg'], 
@@ -224,6 +222,7 @@ class MRIDataset(Dataset):
                 clicks_num=self.clicks['num'], 
                 clicks_dst=self.clicks.get('dst') or 4
             )
+
             # seg = seg.unsqueeze(0)
             # return stacked, clicks, seg
             seg = torch.stack((seg, clicks))
@@ -233,28 +232,176 @@ class MRIDataset(Dataset):
         return stacked, seg
 
 
+class CorrectionMRIDataset(Dataset):
+    """ Torch Dataset which returns ... """
+    
+    def __init__(self, seg_list: tuple[str], img_dims: tuple[int], clicks, cuts, errors=False):
+        self.seg_list = seg_list
+        self.img_dims = img_dims
+        self.clicks = clicks
+        self.cuts = cuts
+        self.errors = errors
+
+    def __len__(self):
+        return len(self.seg_list)
+    
+    def _cut_volume(self, label: torch.Tensor, cut_size=32, num=np.inf, random=False) -> list[torch.Tensor]:
+        cut_size = cut_size // 2 # needed only as a distance from the center
+        
+        click_coords = torch.nonzero(label[1])
+        # randomize cuts
+        if random:
+            click_coords = click_coords[torch.randperm(len(click_coords))]
+        
+        cuts = []
+        k = num if len(click_coords) > num else len(click_coords)
+        for click_idx in range(0, k):
+            coords = click_coords[click_idx]
+
+            click = torch.zeros_like(label[0][coords[0]])
+            click[coords[1], coords[2]] = 1
+
+            cut = torch.clone(label[0][coords[0]])
+            # cut[coords[1], coords[2]] = 2
+            cut = cut[
+                coords[1]-cut_size:coords[1]+cut_size,
+                coords[2]-cut_size:coords[2]+cut_size
+            ]
+            cuts.append(cut.unsqueeze(0))
+            # cuts.append(cut)
+        
+        return cuts
+
+    def _simulate_errors(self, cuts: list[torch.Tensor]) -> list[torch.Tensor]:
+        # cuts, _ = cut_volume(label, cut_size=cut_size, num=num)
+        erosion_kernel = cv2.getStructuringElement(shape=cv2.MORPH_RECT, ksize=(3, 3))
+        dilatation_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(3, 3))
+
+        faked_cuts = []
+        for cut in cuts:
+            pp = np.random.uniform(low=0.0, high=1.0)
+
+            if 0.5 > pp:
+                cut = cv2.erode(cut.numpy(), kernel=erosion_kernel, iterations=1)
+            else:
+                cut = cv2.dilate(cut.numpy(), kernel=dilatation_kernel, iterations=1)
+            faked_cuts.append(torch.tensor(cut))
+
+        return faked_cuts
+        
+    def __getitem__(self, idx: int) -> list[torch.Tensor]:
+        """  """
+        
+        # Load the data
+        seg = torch.as_tensor(nib.load(self.seg_list[idx]).get_fdata(), dtype=torch.float32).permute(2, 0, 1)
+        # print('old shapes: ', t1.shape, t2.shape, seg.shape)
+
+        # Crop the image 
+        if self.img_dims[1]*2 > seg.shape[1]:
+            seg = TF.center_crop(seg, (self.img_dims[1], self.img_dims[2]))
+        else:
+            seg = TF.center_crop(seg, (self.img_dims[1]*2, self.img_dims[2]*2))
+
+        # Crop the depth of the volumes when they have bigger depth than required
+        if seg.shape[0] > self.img_dims[0]:
+            start_index, end_index = _get_new_depth(seg, self.img_dims)
+            seg = seg[start_index:end_index,:,:]
+        
+        # When the depth is smaller than required, fill the difference with zeros     
+        elif seg.shape[0] < self.img_dims[0]:
+            pad = (0, 0, 0, 0, (self.img_dims[0]-seg.shape[0])//2, (self.img_dims[0]-seg.shape[0])//2)
+            seg = F.pad(seg, pad, "constant", 0)
+
+        # Resizing to required width/height 
+        seg = TF.resize(seg, (self.img_dims[1], self.img_dims[2]), interpolation=TF.InterpolationMode.NEAREST, antialias=False)
+
+        clicks = _generate_clicks(
+            seg, 
+            border=True, 
+            clicks_num=self.clicks['num'], 
+            clicks_dst=self.clicks.get('dst') or 4
+        )
+
+        seg = torch.stack((seg, clicks))
+        
+        cuts = self._cut_volume(
+            seg, 
+            cut_size=self.cuts['size'], 
+            num=self.cuts['num'], 
+            random=self.cuts['random']
+        )
+
+        if self.errors:
+            cuts = self._simulate_errors(cuts)
+
+        return cuts
+
+
+class CorrectionDataloader:
+    def __init__(self, dataset: Dataset, batch_size: int):
+        self.dataset = dataset
+        self.batch_size = batch_size
+    
+    def __len__(self):
+        return len(self.dataset)    
+
+    def __iter__(self):
+        for data in self.dataset:
+            for batch_idx in range(0, len(data), self.batch_size):
+                batch = torch.stack(data[batch_idx:batch_idx+self.batch_size])
+
+                yield batch
+
+
 if __name__ == '__main__':
     data_path = 'data/all/'
     t1_list = glob.glob(os.path.join(data_path, 'VS-*-*/vs_*/*_t1_*'))
     t2_list = glob.glob(os.path.join(data_path, 'VS-*-*/vs_*/*_t2_*'))
     seg_list = glob.glob(os.path.join(data_path, 'VS-*-*/vs_*/*_seg_*'))
 
-    # data = MRIDataset([t1_list[0]], [t2_list[0]], [seg_list[0]], (40, 80, 80))
-    data = MRIDataset(
-        ['data/all/VS-31-61/vs_gk_56/vs_gk_t1_refT2.nii.gz'], 
-        ['data/all/VS-31-61/vs_gk_56/vs_gk_t2_refT2.nii.gz'], 
+    # data = MRIDataset(
+    #     ['data/all/VS-31-61/vs_gk_56/vs_gk_t1_refT2.nii.gz'], 
+    #     ['data/all/VS-31-61/vs_gk_56/vs_gk_t2_refT2.nii.gz'], 
+    #     ['data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz'], 
+    #     (40, 80, 80),
+    #     clicks = {
+    #         'use': True,
+    #         'gen_fg': False,
+    #         'gen_bg': False,
+    #         'gen_border': True,
+    #         'num': 20,
+    #     }
+    # )
+    # img, seg = data[0]
+    # print(img.shape, seg.shape)
+    # print(img.dtype, seg.dtype)
+
+    data = CorrectionMRIDataset(
         ['data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz'], 
-        (40, 80, 80),
+        (40, 256, 256),
         clicks = {
-            'use': True,
-            'gen_fg': False,
-            'gen_bg': False,
-            'gen_border': True,
-            'num': 20,
-        }
+            'num': 3,
+            'dst': 10
+        },
+        cuts = {
+            'num': np.inf,
+            'size': 32,
+            'random': False,
+        },
+        errors=False
     )
-    img, seg = data[0]
-    print(img.shape, seg.shape)
-    print(img.dtype, seg.dtype)
+    seg = data[0]
+    print(len(seg))
+    print(seg[0].shape)
+
+    # batch_size = 4
+    # batches = [seg[i:i+batch_size] for i in range(0, len(seg), batch_size)]
+    # batch_tensors = [torch.stack(batch) for batch in batches]
+    # print(len(batch_tensors))
+    # print(batch_tensors[0].shape)
+
+    dataloader = CorrectionDataloader(data, 4)
+    for i, y in enumerate(dataloader):
+        print(i, y.shape)
 
     # preview(img, seg, torch.tensor(0.213), 100)

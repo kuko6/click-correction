@@ -1,11 +1,7 @@
-# import cv2
+import cv2
 import torch
 import numpy as np
-# import nibabel as nib
 import matplotlib.pyplot as plt
-
-# from data_generator import MRIDataset
-
 
 def get_glioma_indices(mask: torch.Tensor) -> tuple[int, int]:
     """ Returns the first and last slice indices of the tumour in given mask """
@@ -22,54 +18,47 @@ def get_glioma_indices(mask: torch.Tensor) -> tuple[int, int]:
     return first, last
 
 
-# !!! Outdated !!!
-# def preview_clicks(t1_list, t2_list, seg_list, clicks):
-#     """ Saves a png containing both sequences and a segmentation mask with clicks """
-
-#     data = MRIDataset([t1_list[10]], [t2_list[10]], [seg_list[10]], (40, 80, 80), clicks=clicks)
-#     img, clicks = data[0]
-#     data = MRIDataset([t1_list[10]], [t2_list[10]], [seg_list[10]], (40, 80, 80))
-#     img, seg = data[0]
-
-#     # Compute number of slices with the tumour
-#     first, last = get_glioma_indices(seg)
-#     length = (last-first+1)
-#     n_graphs = (length*3)//6
-#     rows = n_graphs
-#     cols = 6
-#     res = cols if cols > rows else rows
-
-#     mask = seg[0,:,:,:] + clicks[1,:,:,:] + clicks[0,:,:,:]
-
-#     # Plot them
-#     fig, axs = plt.subplots(rows, cols, figsize=(res*2, res*2))
-#     axs = axs.flatten()
-#     j = 0
-#     for i in range(first, last):
-#         if j >= len(axs): break
-#         axs[j].imshow(img[0,i,:,:], cmap='gray')
-#         axs[j].axis('off')
-#         axs[j].set_title(f't1 slice {i}', fontsize=9)
-
-#         axs[j+1].imshow(img[1,i,:,:], cmap='gray')
-#         axs[j+1].axis('off')
-#         axs[j+1].set_title(f't2 slice {i}', fontsize=9)
-
-#         axs[j+2].imshow(mask[i,:,:], cmap='magma')
-#         axs[j+2].axis('off')
-#         axs[j+2].set_title(f'mask slice {i}', fontsize=9)
+def cut_volume(label: torch.Tensor, cut_size=20, num=12):
+    cut_size = cut_size // 2 # needed only as a distance from the center
     
-#         # axs[j+3].imshow(clicks[0,i,:,:], cmap='magma')
-#         # axs[j+3].axis('off')
-#         # axs[j+3].set_title(f'bg clicks slice {i}', fontsize=9)
+    click_coords = torch.nonzero(label[1])
+    cuts = []
+    k = num if len(click_coords) > num else len(click_coords)
+    
+    for click_idx in range(0, k):
+        coords = click_coords[click_idx]
 
-#         # axs[j+4].imshow(clicks[1,i,:,:], cmap='magma')
-#         # axs[j+4].axis('off')
-#         # axs[j+4].set_title(f'fg clicks slice {i}', fontsize=9)
-#         j += 3
+        click = torch.zeros_like(label[0][coords[0]])
+        click[coords[1], coords[2]] = 1
 
-#     fig.savefig('outputs/clicks_preview.png')
-#     plt.close(fig)
+        # a = label[0][coords[0]] + click
+        a = torch.clone(label[0][coords[0]])
+        # a[coords[1], coords[2]] = 2
+        cut = a[
+            coords[1]-cut_size:coords[1]+cut_size,
+            coords[2]-cut_size:coords[2]+cut_size
+        ]
+        cuts.append(cut)
+    
+    return cuts, click_coords
+
+
+def fake_errors(cuts: list[torch.Tensor]):
+    # cuts, _ = cut_volume(label, cut_size=cut_size, num=num)
+    erosion_kernel = cv2.getStructuringElement(shape=cv2.MORPH_RECT, ksize=(3, 3))
+    dilatation_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(3, 3))
+
+    faked_cuts = []
+    for cut in cuts:
+        pp = np.random.uniform(low=0.0, high=1.0)
+
+        if 0.5 > pp:
+            cut = cv2.erode(cut.numpy(), kernel=erosion_kernel, iterations=1)
+        else:
+            cut = cv2.dilate(cut.numpy(), kernel=dilatation_kernel, iterations=1)
+        faked_cuts.append(torch.tensor(cut))
+
+    return faked_cuts
 
 
 def preview(y_pred: torch.Tensor, y: torch.Tensor, dice: torch.Tensor, epoch=0):

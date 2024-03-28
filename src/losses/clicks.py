@@ -15,7 +15,7 @@ class DistanceLoss(nn.Module):
         self.preds_threshold = preds_threshold
         self.alpha = 3
 
-    def forward(self, y_pred, y_true):
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
         combined = torch.zeros_like(y_pred)
         
         if self.probs:

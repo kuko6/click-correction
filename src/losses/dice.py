@@ -15,6 +15,19 @@ def dice_coefficient(y_pred: torch.Tensor, y_true: torch.Tensor, eps=1e-6):
     # mean for the whole batch
     return dice.mean()
 
+def dice_coefficient2d(y_pred: torch.Tensor, y_true: torch.Tensor, eps=1e-6):
+    """ Computes the dice coeff. for each class by summing over the depth, height, and width """
+    
+    # sum for each element in batch 
+    intersection = torch.sum(y_pred * y_true, dim=[2, 3])
+    union = torch.sum(y_pred, dim=[2, 3]) + torch.sum(y_true, dim=[2, 3])
+    dice = (2. * intersection + eps) / (union + eps)
+    # print(dice.shape)
+
+    # mean for the whole batch
+    return dice.mean()
+
+
 
 class DiceLoss(nn.Module):
     """ 
@@ -29,6 +42,21 @@ class DiceLoss(nn.Module):
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor):
         return 1 - dice_coefficient(y_pred, y_true)
+    
+
+class DiceLoss2d(nn.Module):
+    """ 
+    Simple Dice loss function defined as:
+    ```
+    dice_loss = 1 - dice_coeff
+    ```
+    """
+  
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        return 1 - dice_coefficient2d(y_pred, y_true)
 
 
 class DiceBCELoss(nn.Module):

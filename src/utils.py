@@ -2,6 +2,22 @@ import cv2
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
+import scipy
+
+def get_weight_map(cutshape: tuple, minthresh=9, maxthresh=20, inverted=False) -> torch.Tensor:
+    tmp = torch.zeros(cutshape)
+    tmp[:,cutshape[2]//2, cutshape[2]//2] = 1
+    dst = scipy.ndimage.distance_transform_edt(1-tmp[0])
+
+    if inverted:
+        weight_map = (1-dst)+np.abs(np.min(1-dst))
+    else: 
+        weight_map = dst
+    weight_map[weight_map > maxthresh] = maxthresh
+    weight_map[weight_map < minthresh] = 0
+    
+    return torch.as_tensor(weight_map, dtype=torch.float32).unsqueeze(0)
+
 
 def get_glioma_indices(mask: torch.Tensor) -> tuple[int, int]:
     """ Returns the first and last slice indices of the tumour in given mask """

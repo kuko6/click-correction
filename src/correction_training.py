@@ -10,22 +10,23 @@ import torch
 from torch.utils.data import DataLoader
 from torchinfo import summary
 
-from model import Unet
-from data_generator import MRIDataset
+from correction_model import CorrectionUnet
+from data_generator import CorrectionDataloader, CorrectionMRIDataset
 from utils import EarlyStopper, preview
-from losses.dice import dice_coefficient, DiceLoss, DiceBCELoss
-from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss
-from losses.clicks import DistanceLoss, DistanceLoss2
+from losses.dice import dice_coefficient2d, DiceLoss2d
+from losses.correction import CorrectionLoss
+# from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss
+# from losses.clicks import DistanceLoss, DistanceLoss2
 
 
-use_wandb = True
+use_wandb = False
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = torch.device('cuda' if torch.cuda.is_available() else 'mps')
 print(f'[Using {device} device]')
 
 config = {
     'lr': 1e-3,
-    'img_channels': 2,
+    'img_channels': 1,
     'num_classes': 1,
     'conv_blocks': 3, # 3 if device == 'cpu' else 4
     'dataset': 'Schwannoma',
@@ -36,72 +37,63 @@ config = {
     'augment': False,
     'scheduler': True,
     'early_stopper': True,
-    'img_dims': (40, 128, 128), # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
-    'training': 'clicks-pretraining', # base, clicks-pretraining, clicks
+    'img_dims': (40, 256, 256), # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
+    'training': 'base', # base, clicks-pretraining, clicks
     'clicks': {
-        'use': False,
-        'gen_fg': False,
-        'gen_bg': False,
-        'gen_border': True,
-        'num': 10,
-        'dst': 4
+        'num': 3,
+        'dst': 10
+    },
+    'cuts': {
+        'num': 12, # np.inf
+        'size': 32,
+        'random': False,
     }
 }
 
-def prepare_data(data_dir: str) -> MRIDataset:
+def prepare_data(data_dir: str) ->list[CorrectionMRIDataset, CorrectionMRIDataset]:
     """ Loads the data from `data_dir` and returns `Dataset` """
 
-    t1_list = sorted(glob.glob(os.path.join(data_dir, 'VS-*-*/vs_*/*_t1_*')))
-    t2_list = sorted(glob.glob(os.path.join(data_dir, 'VS-*-*/vs_*/*_t2_*')))
     seg_list = sorted(glob.glob(os.path.join(data_dir, 'VS-*-*/vs_*/*_seg_*')))
-
-    t1_train, t1_val, t2_train, t2_val, seg_train, seg_val = train_test_split(t1_list, t2_list, seg_list, test_size=0.2, train_size=0.8, random_state=420)
-    t1_val.append(t1_train.pop(-1))
-    t2_val.append(t2_train.pop(-1))
+    
+    seg_train, seg_val = train_test_split(seg_list, test_size=0.2, train_size=0.8, random_state=420)
     seg_val.append(seg_train.pop(-1))
 
     # if config['clicks']['use']:
     #     preview_clicks(t1_list, t2_list, seg_list, config['clicks'])
     
     # TODO: redo this part so the number of files can be set in config
-    if config['training'] == 'base':
-        train_data = MRIDataset(t1_train, t2_train, seg_train, config['img_dims'], clicks=config['clicks'])
-        val_data = MRIDataset(t1_val, t2_val, seg_val, config['img_dims'], clicks=config['clicks'])
-    elif config['training'] == 'clicks':
-        train_data = MRIDataset(t1_train[30:], t2_train[30:], seg_train[30:], config['img_dims'], clicks=config['clicks'])
-        val_data = MRIDataset(t1_val[10:], t2_val[10:], seg_val[10:], config['img_dims'], clicks=config['clicks'])
-        # train_data = MRIDataset(t1_train, t2_train, seg_train, config['img_dims'], clicks=config['clicks'])
-        # val_data = MRIDataset(t1_val, t2_val, seg_val, config['img_dims'])
-    elif config['training'] == 'clicks-pretraining':
-        train_data = MRIDataset(t1_train[:20], t2_train[:20], seg_train[:20], config['img_dims'], clicks=False)
-        val_data = MRIDataset(t1_val[:10], t2_val[:10], seg_val[:10], config['img_dims'])
-    
+    train_data = CorrectionMRIDataset(seg_train[:40], config['img_dims'], clicks=config['clicks'], cuts=config['cuts'])
+    val_data = CorrectionMRIDataset(seg_list[:10], config['img_dims'], clicks=config['clicks'], cuts=config['cuts'])
     print(len(train_data), len(val_data))
-    # print(len(t1_train), len(t2_train), len(seg_train))
-    # print(len(t1_val), len(t2_val), len(seg_val))
 
-    train_dataloader = DataLoader(train_data, batch_size=config['batch_size'], shuffle=True)
-    val_dataloader = DataLoader(val_data, batch_size=config['batch_size'], shuffle=False)
+    train_dataloader = CorrectionDataloader(train_data, batch_size=config['batch_size'])
+    val_dataloader = CorrectionDataloader(val_data, batch_size=config['batch_size'])
+
+    # print(train_data[0])
+    # for i, (x, y) in enumerate(train_dataloader):
+    #     print(i)
+    #     break
+
 
     # TODO: format the output
-    np.savetxt(
-        "outputs/training_files.csv", 
-        [('t1', 't2', 'seg')]+list(zip(t1_train, t2_train, seg_train)), 
-        delimiter =", ", 
-        fmt ='% s'
-    )
+    # np.savetxt(
+    #     "outputs/training_files.csv", 
+    #     [('seg')]+list(zip(seg_train)), 
+    #     delimiter =", ", 
+    #     fmt ='% s'
+    # )
 
-    np.savetxt(
-        "outputs/validation_files.csv", 
-        [('t1', 't2', 'seg')]+list(zip(t1_val, t2_val, seg_val)), 
-        delimiter =", ", 
-        fmt ='% s'
-    )
+    # np.savetxt(
+    #     "outputs/validation_files.csv", 
+    #     [('seg')]+list(zip(seg_val)), 
+    #     delimiter =", ", 
+    #     fmt ='% s'
+    # )
 
     return train_dataloader, val_dataloader
 
 
-def val(dataloader: DataLoader, model: Unet, loss_fn: torch.nn.Module, epoch: int) -> tuple[float, float]:
+def val(dataloader: DataLoader, model: CorrectionUnet, loss_fn: torch.nn.Module, epoch: int) -> tuple[float, float]:
     """ Validate model after each epoch on validation dataset, returns the avg. loss and avg. dice """
     
     model.eval()
@@ -112,21 +104,17 @@ def val(dataloader: DataLoader, model: Unet, loss_fn: torch.nn.Module, epoch: in
             y_pred = model(x)
 
             # Compute loss and dice coefficient
-            if config['clicks']['use']:
-                loss = loss_fn(y_pred, y[:,1].unsqueeze(1))
-                dice = dice_coefficient(y_pred, y[:,0].unsqueeze(1))
-            else:
-                loss = loss_fn(y_pred, y)
-                dice = dice_coefficient(y_pred, y)
+            loss = loss_fn(y_pred, y)
+            dice = dice_coefficient2d(y_pred, y)
 
             avg_loss += loss.item()
             avg_dice += dice.item()
 
             print(f'validation step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}', end='\r')
 
-            if i==0:
-                # preview(y_pred[0], y[0], dice_coefficient(y_pred, y), epoch)
-                preview(y_pred[0], y[0], dice.item(), epoch)
+            # if i==0:
+            #     # preview(y_pred[0], y[0], dice_coefficient2d2d(y_pred, y), epoch)
+            #     preview(y_pred[0], y[0], dice.item(), epoch)
 
     avg_loss /= len(dataloader)
     avg_dice /= len(dataloader)
@@ -135,7 +123,7 @@ def val(dataloader: DataLoader, model: Unet, loss_fn: torch.nn.Module, epoch: in
     return (avg_loss, avg_dice)
 
 
-def train_one_epoch(dataloader: DataLoader, model: Unet, loss_fn, optimizer, epoch) -> tuple[float, float]:
+def train_one_epoch(dataloader: CorrectionDataloader, model: CorrectionUnet, loss_fn: torch.nn.Module, optimizer, epoch) -> tuple[float, float]:
   """ Train model for one epoch on the training dataset, returns the avg. loss and avg. dice """
 
   model.train()
@@ -149,12 +137,10 @@ def train_one_epoch(dataloader: DataLoader, model: Unet, loss_fn, optimizer, epo
     y_pred = model(x)
 
     # Compute loss and dice coefficient
-    if config['clicks']['use']:
-        loss = loss_fn(y_pred, y[:,1].unsqueeze(1))
-        dice = dice_coefficient(y_pred, y[:,0].unsqueeze(1))
-    else:
-        loss = loss_fn(y_pred, y)
-        dice = dice_coefficient(y_pred, y)
+    loss = loss_fn(y_pred, y)
+    dice = dice_coefficient2d(y_pred, y)
+    print(loss.shape)
+    print(dice.shape)
 
     avg_loss += loss.item()
     avg_dice += dice.item()
@@ -172,7 +158,7 @@ def train_one_epoch(dataloader: DataLoader, model: Unet, loss_fn, optimizer, epo
   return (avg_loss, avg_dice)
 
 
-def train(train_dataloader: DataLoader, val_dataloader: DataLoader, model: Unet, loss_fn, optimizer, scheduler):
+def train(train_dataloader: CorrectionDataloader, val_dataloader: DataLoader, model: CorrectionUnet, loss_fn, optimizer, scheduler):
     """ Run the training """
     
     epochs = config['epochs']
@@ -287,54 +273,44 @@ def main():
     # Prepare Datasets
     train_dataloader, val_dataloader = prepare_data(data_dir)
 
-    # Initialize model
-    model = Unet(
+    # # Initialize model
+    model = CorrectionUnet(
         in_channels=config['img_channels'], 
         out_channels=config['num_classes'], 
         blocks=config['conv_blocks']
     ).to(device)
 
     # writes model architecture to a file (just for experiment logging)
-    with open('outputs/architecture.txt', 'w') as f:
-        model_summary = summary(
-            Unet(in_channels=config['img_channels'], 
-                out_channels=config['num_classes'], 
-                blocks=config['conv_blocks'],
-            ), 
-            input_size=(config['batch_size'], config['img_channels'], *config['img_dims']), 
-            verbose=0
-        )
-        f.write(str(model_summary))
+        # with open('outputs/architecture.txt', 'w') as f:
+        #     model_summary = summary(
+        #         CorrectionUnet(
+        #             in_channels=config['img_channels'], 
+        #             out_channels=config['num_classes'], 
+        #             blocks=config['conv_blocks'],
+        #         ), 
+        #         input_size=(config['batch_size'], config['img_channels'], *config['img_dims'][1:]), 
+        #         verbose=0
+        #     )
+        #     f.write(str(model_summary))
 
     # Initialize optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=config['lr'])
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.1)
     
     # Load pretrained model
-    if args.model_path and config['training'] == 'clicks':
-        print('Using pretrained model')
-        checkpoint = torch.load(args.model_path, map_location=device)
-        model.load_state_dict(checkpoint['model_state'])
-        optimizer.load_state_dict(checkpoint['optimizer_state'])
+    # if args.model_path and config['training'] == 'clicks':
+    #     print('Using pretrained model')
+    #     checkpoint = torch.load(args.model_path, map_location=device)
+    #     model.load_state_dict(checkpoint['model_state'])
+    #     optimizer.load_state_dict(checkpoint['optimizer_state'])
 
     # Select loss function
-    classes = {0: 64115061, 1: 396939}
-    # total_pixels = classes[0] + classes[1]
-    # weight = torch.tensor(total_pixels/classes[0]).to(device)
-    weight = torch.tensor(classes[1]/classes[0]).to(device)
+    # loss_fn = DiceLoss2d()
+    loss_fn = CorrectionLoss(cutshape=(1, 32, 32), device=device, batch_size=config['batch_size'])
 
-    loss_functions = {
-        'bce': torch.nn.BCELoss(weight=weight),
-        'dice': DiceLoss(),
-        'dicebce': DiceBCELoss(weight=weight),
-        'focal': FocalLoss(alpha=weight, gamma=2),
-        'tversky': TverskyLoss(alpha=.3, beta=.7),
-        'focaltversky': FocalTverskyLoss(alpha=.3, beta=.7, gamma=.75),
-        'distance': DistanceLoss(thresh_val=10.0, probs=True, preds_threshold=0.7),
-        'distance2': DistanceLoss2(thresh_val=10.0, probs=True, preds_threshold=0.7)
-    }
-
-    loss_fn = loss_functions[config['loss']]
+    # for i, (x, y) in enumerate(train_dataloader):
+    #     print(i, y.shape)
+    #     return
 
     # Train :D
     train(train_dataloader, val_dataloader, model, loss_fn, optimizer, scheduler)

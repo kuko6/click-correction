@@ -6,15 +6,15 @@ from torchinfo import summary
 def build_conv_block(in_channels: tuple[int], out_channels: tuple[int]):
     """ 
     Creates a convolution block with: \n
-    `3dConv -> 3dBatchNorm -> ReLu -> 3dConv -> 3dBatchNorm -> ReLu` 
+    `2dConv -> 2dBatchNorm -> ReLu -> 2dConv -> 2dBatchNorm -> ReLu` 
     """
     
     return nn.Sequential(
-        nn.Conv3d(in_channels[0], out_channels[0], kernel_size=3, padding=1, padding_mode='zeros'),
-        nn.BatchNorm3d(out_channels[0]),
+        nn.Conv2d(in_channels[0], out_channels[0], kernel_size=3, padding=1, padding_mode='zeros'),
+        nn.BatchNorm2d(out_channels[0]),
         nn.ReLU(),
-        nn.Conv3d(in_channels[1], out_channels[1], kernel_size=3, padding=1, padding_mode='zeros'),
-        nn.BatchNorm3d(out_channels[1]),
+        nn.Conv2d(in_channels[1], out_channels[1], kernel_size=3, padding=1, padding_mode='zeros'),
+        nn.BatchNorm2d(out_channels[1]),
         nn.ReLU(),
     )
 
@@ -22,7 +22,7 @@ def build_conv_block(in_channels: tuple[int], out_channels: tuple[int]):
 class DownBlock(nn.Module):
     """ 
     A downsample block built with one convolution block 
-    and a `3dMaxPool` layer.
+    and a `2dMaxPool` layer.
     """
 
     def __init__(self, in_channels: tuple[int], out_channels: tuple[int]):
@@ -31,7 +31,7 @@ class DownBlock(nn.Module):
             in_channels=[in_channels[0], in_channels[1]], 
             out_channels=[out_channels[0], out_channels[1]]
         )
-        self.down = nn.MaxPool3d(kernel_size=2)
+        self.down = nn.MaxPool2d(kernel_size=2)
 
     def forward(self, x):
         out = self.conv(x)
@@ -42,12 +42,12 @@ class DownBlock(nn.Module):
 
 class UpBlock(nn.Module):
     """
-    An upsample block built with one `3dConvTranspose` followed
+    An upsample block built with one `2dConvTranspose` followed
     by one convolution block.
     """
     def __init__(self, in_channels: tuple[int], out_channels: tuple[int]):
         super().__init__()
-        self.up = nn.ConvTranspose3d(in_channels=in_channels[0], out_channels=out_channels[0], kernel_size=2, stride=2)
+        self.up = nn.ConvTranspose2d(in_channels=in_channels[0], out_channels=out_channels[0], kernel_size=2, stride=2)
         # self.up = nn.Upsample(scale_factor=2, mode='trilinear', align_corners=True)
         self.conv = build_conv_block(in_channels=[in_channels[0], in_channels[1]], out_channels=[out_channels[1], out_channels[1]])
 
@@ -59,12 +59,12 @@ class UpBlock(nn.Module):
         return out
 
 
-class Unet(nn.Module):
+class CorrectionUnet(nn.Module):
     """
     Unet model with 3 downsampling blocks and 3 upsampling blocks, where
     one block consists of: \n
-    `3dConv -> 3dBatchNorm -> ReLu -> 3dConv -> 3dBatchNorm -> ReLu`
-    and a sampling operation (`3dMaxPool`/`3dConvTranspose`).
+    `2dConv -> 2dBatchNorm -> ReLu -> 2dConv -> 2dBatchNorm -> ReLu`
+    and a sampling operation (`2dMaxPool`/`2dConvTranspose`).
     """
     def __init__(self, in_channels, out_channels, blocks=3):
         super().__init__()
@@ -73,7 +73,7 @@ class Unet(nn.Module):
 
         possible_channels = [in_channels, 16, 32, 64, 128]
         channels = possible_channels[:blocks+1]
-
+        
         # Downsampling path
         for i in range(0, len(channels)-1):
             self.downsampling_path.append(
@@ -91,7 +91,7 @@ class Unet(nn.Module):
 
         # Output
         self.output = nn.Sequential(
-            nn.Conv3d(in_channels=channels[1], out_channels=out_channels, kernel_size=1),
+            nn.Conv2d(in_channels=channels[1], out_channels=out_channels, kernel_size=1),
             nn.Sigmoid()
         )
 
@@ -118,6 +118,6 @@ class Unet(nn.Module):
 
 
 if __name__ == '__main__':
-    summary(Unet(in_channels=2, out_channels=1), input_size=(2, 2, 40, 80, 80))
+    summary(CorrectionUnet(in_channels=1, out_channels=1, blocks=3), input_size=(2, 1, 32, 32))
     # print(Unet()._modules)
     # summary(Unet(block_num=4), input_size=(2, 2, 64, 128, 128))

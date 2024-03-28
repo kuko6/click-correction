@@ -235,17 +235,18 @@ class MRIDataset(Dataset):
 class CorrectionMRIDataset(Dataset):
     """ Torch Dataset which returns ... """
     
-    def __init__(self, seg_list: tuple[str], img_dims: tuple[int], clicks, cuts, errors=False):
+    def __init__(self, seg_list: tuple[str], img_dims: tuple[int], clicks, cuts):
         self.seg_list = seg_list
         self.img_dims = img_dims
         self.clicks = clicks
         self.cuts = cuts
-        self.errors = errors
 
     def __len__(self):
         return len(self.seg_list)
     
     def _cut_volume(self, label: torch.Tensor, cut_size=32, num=np.inf, random=False) -> list[torch.Tensor]:
+        """ """
+
         cut_size = cut_size // 2 # needed only as a distance from the center
         
         click_coords = torch.nonzero(label[1])
@@ -273,9 +274,11 @@ class CorrectionMRIDataset(Dataset):
         return cuts
 
     def _simulate_errors(self, cuts: list[torch.Tensor]) -> list[torch.Tensor]:
+        """ """
+
         # cuts, _ = cut_volume(label, cut_size=cut_size, num=num)
-        erosion_kernel = cv2.getStructuringElement(shape=cv2.MORPH_RECT, ksize=(3, 3))
-        dilatation_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(3, 3))
+        erosion_kernel = cv2.getStructuringElement(shape=cv2.MORPH_RECT, ksize=(5, 5))
+        dilatation_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(5, 5))
 
         faked_cuts = []
         for cut in cuts:
@@ -289,7 +292,7 @@ class CorrectionMRIDataset(Dataset):
 
         return faked_cuts
         
-    def __getitem__(self, idx: int) -> list[torch.Tensor]:
+    def __getitem__(self, idx: int) -> list[torch.Tensor, torch.Tensor]:
         """  """
         
         # Load the data
@@ -331,13 +334,14 @@ class CorrectionMRIDataset(Dataset):
             random=self.cuts['random']
         )
 
-        if self.errors:
-            cuts = self._simulate_errors(cuts)
+        faked_cuts = self._simulate_errors(cuts)
 
-        return cuts
+        return faked_cuts, cuts 
 
 
 class CorrectionDataloader:
+    """ """
+
     def __init__(self, dataset: Dataset, batch_size: int):
         self.dataset = dataset
         self.batch_size = batch_size
@@ -348,9 +352,10 @@ class CorrectionDataloader:
     def __iter__(self):
         for data in self.dataset:
             for batch_idx in range(0, len(data), self.batch_size):
-                batch = torch.stack(data[batch_idx:batch_idx+self.batch_size])
+                faked_batch = torch.stack(data[0][batch_idx:batch_idx+self.batch_size])
+                batch = torch.stack(data[1][batch_idx:batch_idx+self.batch_size])
 
-                yield batch
+                yield faked_batch, batch
 
 
 if __name__ == '__main__':
@@ -387,12 +392,11 @@ if __name__ == '__main__':
             'num': np.inf,
             'size': 32,
             'random': False,
-        },
-        errors=False
+        }
     )
-    seg = data[0]
-    print(len(seg))
-    print(seg[0].shape)
+    faked_cuts, cuts = data[0]
+    print(len(cuts))
+    print(cuts[0].shape)
 
     # batch_size = 4
     # batches = [seg[i:i+batch_size] for i in range(0, len(seg), batch_size)]
@@ -401,7 +405,7 @@ if __name__ == '__main__':
     # print(batch_tensors[0].shape)
 
     dataloader = CorrectionDataloader(data, 4)
-    for i, y in enumerate(dataloader):
-        print(i, y.shape)
+    for i, (x, y) in enumerate(dataloader):
+        print(i, x.shape, y.shape)
 
     # preview(img, seg, torch.tensor(0.213), 100)

@@ -15,6 +15,7 @@ def dice_coefficient(y_pred: torch.Tensor, y_true: torch.Tensor, eps=1e-6):
     # mean for the whole batch
     return dice.mean()
 
+
 def dice_coefficient2d(y_pred: torch.Tensor, y_true: torch.Tensor, eps=1e-6):
     """ Computes the dice coeff. for each class by summing over the depth, height, and width """
     
@@ -27,8 +28,6 @@ def dice_coefficient2d(y_pred: torch.Tensor, y_true: torch.Tensor, eps=1e-6):
     # mean for the whole batch
     return dice.mean()
 
-
-
 class DiceLoss(nn.Module):
     """ 
     Simple Dice loss function defined as:
@@ -37,27 +36,14 @@ class DiceLoss(nn.Module):
     ```
     """
   
-    def __init__(self):
+    def __init__(self, volumetric=True):
+        self.use_3d = volumetric
         super().__init__()
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor):
-        return 1 - dice_coefficient(y_pred, y_true)
-    
-
-class DiceLoss2d(nn.Module):
-    """ 
-    Simple Dice loss function defined as:
-    ```
-    dice_loss = 1 - dice_coeff
-    ```
-    """
-  
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor):
+        if self.use_3d:
+            return 1 - dice_coefficient(y_pred, y_true)
         return 1 - dice_coefficient2d(y_pred, y_true)
-
 
 class DiceBCELoss(nn.Module):
     """ 

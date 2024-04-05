@@ -1,7 +1,23 @@
 import torch
 from torch import nn
+import scipy
+import numpy as np
+
 from losses.dice import dice_coefficient2d
-from utils import get_glioma_indices, get_weight_map
+
+def _get_weight_map(cutshape: tuple, minthresh=9, maxthresh=20, inverted=False) -> torch.Tensor:
+    tmp = torch.zeros(cutshape)
+    tmp[:,cutshape[2]//2, cutshape[2]//2] = 1
+    dst = scipy.ndimage.distance_transform_edt(1-tmp[0])
+
+    if inverted:
+        weight_map = (1-dst)+np.abs(np.min(1-dst))
+    else: 
+        weight_map = dst
+    weight_map[weight_map > maxthresh] = maxthresh
+    weight_map[weight_map < minthresh] = 0
+    
+    return torch.as_tensor(weight_map, dtype=torch.float32).unsqueeze(0)
 
 class CorrectionLoss(nn.Module):
     '''
@@ -13,7 +29,7 @@ class CorrectionLoss(nn.Module):
         super().__init__()
         # self.alpha = alpha
         # self.probs = probs
-        self.weight_map = get_weight_map(cutshape)
+        self.weight_map = _get_weight_map(cutshape)
         self.weight_map = self.weight_map.to(device)
         # self.weight_map = torch.stack((self.weight_map, self.weight_map))
 

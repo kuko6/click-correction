@@ -12,7 +12,7 @@ from torchinfo import summary
 
 from model.correction import CorrectionUnet
 from data.correction_generator import CorrectionDataloader, CorrectionMRIDataset
-from utils import EarlyStopper, preview
+from utils import EarlyStopper
 from losses.dice import dice_coefficient2d, DiceLoss
 from losses.correction import CorrectionLoss
 from options import TrainCorrectionOptions
@@ -274,7 +274,7 @@ def main():
 
     # Select loss function
     # loss_fn = DiceLoss(volumetric=False)
-    loss_fn = CorrectionLoss(cutshape=(1, 32, 32), device=device, batch_size=config['batch_size'])
+    loss_fn = CorrectionLoss(dims=(1, 32, 32), device=device, batch_size=config['batch_size'])
 
     # for i, (x, y) in enumerate(train_dataloader):
     #     print(i, y.shape)

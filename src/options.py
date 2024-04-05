@@ -1,4 +1,6 @@
 class TrainOptions:
+    """Configuration used for training basic segmentation models."""
+
     def __init__(self, use_wand=False) -> None:
         self.use_wandb = use_wand
         self.config = {
@@ -28,6 +30,8 @@ class TrainOptions:
 
 
 class TrainCorrectionOptions:
+    """Configuration used for training correction models."""
+    
     def __init__(self, use_wand) -> None:
         self.use_wandb = use_wand
         self.config = {
@@ -45,7 +49,7 @@ class TrainCorrectionOptions:
             "early_stopper": True,
             "img_dims": (256, 256),
             "training": "base",  # base, clicks-pretraining, clicks
-            "clicks": { "num": 3, "dst": 10 },
+            "clicks": {"num": 3, "dst": 10},
             "cuts": {
                 "num": 12,  # np.inf
                 "size": 32,

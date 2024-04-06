@@ -3,9 +3,7 @@ from torch import nn
 from torchinfo import summary
 
 
-def build_conv_block(
-    in_channels: tuple[int], out_channels: tuple[int]
-) -> nn.Sequential:
+def build_conv_block(in_channels: tuple[int], out_channels: tuple[int]) -> nn.Sequential:
     """
     Creates a convolution block with:
 

@@ -17,7 +17,9 @@ class TrainOptions:
             "scheduler": True,
             "early_stopper": True,
             "img_dims": (40, 128, 128),  # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
-            "training": "clicks-pretraining",  # base, clicks-pretraining, clicks
+            "training": "base",  # base, clicks-pretraining, clicks
+            "train_size": 30,
+            "val_size": 10,
             "clicks": {
                 "use": False,
                 "gen_fg": False,
@@ -49,6 +51,8 @@ class TrainCorrectionOptions:
             "early_stopper": True,
             "img_dims": (256, 256),
             "training": "base",  # base, clicks-pretraining, clicks
+            "train_size": 40,
+            "val_size": 10,
             "clicks": {"num": 3, "dst": 10},
             "cuts": {
                 "num": 12,  # np.inf

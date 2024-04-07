@@ -30,10 +30,8 @@ def prepare_data(data_dir: str) -> list[CorrectionMRIDataset, CorrectionMRIDatas
     """Loads the data from `data_dir` and returns `Dataset`."""
 
     seg_list = sorted(glob.glob(os.path.join(data_dir, "VS-*-*/vs_*/*_seg_*")))
-
-    seg_train, seg_val = train_test_split(
-        seg_list, test_size=0.2, train_size=0.8, random_state=420
-    )
+    
+    seg_train, seg_val = train_test_split(seg_list, test_size=0.2, train_size=0.8, random_state=420)
     seg_val.append(seg_train.pop(-1))
 
     # if config['clicks']['use']:
@@ -96,10 +94,7 @@ def val(dataloader: DataLoader, model: CorrectionUnet, loss_fn: torch.nn.Module,
             avg_loss += loss.item()
             avg_dice += dice.item()
 
-            print(
-                f"validation step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}",
-                end="\r",
-            )
+            print(f"validation step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
 
             # if i==0:
             #     # preview(y_pred[0], y[0], dice_coefficient2d2d(y_pred, y), epoch)
@@ -138,10 +133,7 @@ def train_one_epoch(dataloader: CorrectionDataloader, model: CorrectionUnet, los
         loss.backward()
         optimizer.step()
 
-        print(
-            f"training step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}",
-            end="\r",
-        )
+        print(f"training step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
 
     avg_loss /= len(dataloader)
     avg_dice /= len(dataloader)
@@ -207,9 +199,7 @@ def train(
         # Save best checkpoint
         if best["dice"] < val_dice:
             print("-------------------------------")
-            print(
-                f'new best!!! (loss: {best["loss"]:>5f} -> {val_loss:>5f}, dice: {best["dice"]:>5f} -> {val_dice:>5f})'
-            )
+            print(f'new best!!! (loss: {best["loss"]:>5f} -> {val_loss:>5f}, dice: {best["dice"]:>5f} -> {val_dice:>5f})')
 
             torch.save(model_checkpoint, "outputs/best.pt")
 
@@ -243,14 +233,10 @@ def train(
                 break
 
     print("===============================")
-    print(
-        f'The best model was in epoch {best["epoch"]} with loss: {best["loss"]:>5f} and dice: {best["dice"]:>5f}'
-    )
+    print(f'The best model was in epoch {best["epoch"]} with loss: {best["loss"]:>5f} and dice: {best["dice"]:>5f}')
 
     if opt.use_wandb:
-        artifact = wandb.Artifact(
-            "best_model", type="model", metadata={"val_dice": val_dice}
-        )
+        artifact = wandb.Artifact("best_model", type="model", metadata={"val_dice": val_dice})
         artifact.add_file("outputs/best.pt")
         wandb.run.log_artifact(artifact)
         wandb.finish()
@@ -312,15 +298,11 @@ def main():
 
     # Initialize optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, patience=3, factor=0.1
-    )
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.1)
 
     # Select loss function
     # loss_fn = DiceLoss(volumetric=False)
-    loss_fn = CorrectionLoss(
-        dims=(1, 32, 32), device=device, batch_size=config["batch_size"]
-    )
+    loss_fn = CorrectionLoss(dims=(1, 32, 32), device=device, batch_size=config["batch_size"])
 
     # for i, (x, y) in enumerate(train_dataloader):
     #     print(i, y.shape)

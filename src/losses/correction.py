@@ -8,7 +8,7 @@ from losses.dice import dice_coefficient2d
 
 def _get_weight_map(dims: tuple[int], min_thresh=9, max_thresh=20, inverted=False) -> torch.Tensor:
     """
-    Generate weight map around the middle pixel, where the highest value is in the middle .
+    Generate weight map around the middle pixel (the highest value being in the middle).
 
     Args:
         dims (tuple of ints): dimensions of the map in shape (depth, width, height)

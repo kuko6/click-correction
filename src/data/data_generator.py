@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import torchvision.transforms.functional as TF
 
 from .utils import generate_clicks, get_new_depth
-
+# from utils import generate_clicks, get_new_depth
 
 # private function
 def _min_max_normalise(image: torch.Tensor) -> torch.Tensor:
@@ -125,24 +125,26 @@ class MRIDataset(Dataset):
 
 
 if __name__ == "__main__":
-    data_path = "data/all/"
-    t1_list = glob.glob(os.path.join(data_path, "VS-*-*/vs_*/*_t1_*"))
-    t2_list = glob.glob(os.path.join(data_path, "VS-*-*/vs_*/*_t2_*"))
-    seg_list = glob.glob(os.path.join(data_path, "VS-*-*/vs_*/*_seg_*"))
+    data_path = './data/all/VS-1-30'
+    t1_list = sorted(glob.glob(os.path.join(data_path, 'vs_*/*_t1_*')))
+    t2_list = sorted(glob.glob(os.path.join(data_path, 'vs_*/*_t2_*')))
+    seg_list = sorted(glob.glob(os.path.join(data_path, 'vs_*/*_seg_*')))
+    print(len(t1_list))
 
-    data = MRIDataset(
-        ["data/all/VS-31-61/vs_gk_56/vs_gk_t1_refT2.nii.gz"],
-        ["data/all/VS-31-61/vs_gk_56/vs_gk_t2_refT2.nii.gz"],
-        ["data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz"],
-        (40, 80, 80),
-        clicks={
-            "use": True,
-            "gen_fg": False,
-            "gen_bg": False,
-            "gen_border": True,
-            "num": 20,
-        },
+    clicks_dataset = MRIDataset(
+        t1_list[2:4], t2_list[2:4], seg_list[2:4],
+        (40, 256, 256),
+        clicks = {
+            'use': True,
+            'gen_fg': False,
+            'gen_bg': False,
+            'gen_border': True,
+            'num': 3,
+            'dst': 10
+        }
     )
-    img, seg = data[0]
+    
+
+    img, seg = clicks_dataset[0]
     print(img.shape, seg.shape)
     print(img.dtype, seg.dtype)

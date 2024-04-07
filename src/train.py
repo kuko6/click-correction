@@ -85,12 +85,8 @@ def prepare_data(data_dir: str) -> MRIDataset:
     # print(len(t1_train), len(t2_train), len(seg_train))
     # print(len(t1_val), len(t2_val), len(seg_val))
 
-    train_dataloader = DataLoader(
-        train_data, batch_size=config["batch_size"], shuffle=True
-    )
-    val_dataloader = DataLoader(
-        val_data, batch_size=config["batch_size"], shuffle=False
-    )
+    train_dataloader = DataLoader(train_data, batch_size=config["batch_size"], shuffle=True)
+    val_dataloader = DataLoader(val_data, batch_size=config["batch_size"], shuffle=False)
 
     # TODO: format the output
     np.savetxt(
@@ -131,10 +127,7 @@ def val(dataloader: DataLoader, model: Unet, loss_fn: torch.nn.Module, epoch: in
             avg_loss += loss.item()
             avg_dice += dice.item()
 
-            print(
-                f"validation step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}",
-                end="\r",
-            )
+            print(f"validation step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
 
             if i == 0:
                 # preview(y_pred[0], y[0], dice_coefficient(y_pred, y), epoch)
@@ -175,10 +168,7 @@ def train_one_epoch(dataloader: DataLoader, model: Unet, loss_fn, optimizer, epo
         loss.backward()
         optimizer.step()
 
-        print(
-            f"training step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}",
-            end="\r",
-        )
+        print(f"training step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
 
     avg_loss /= len(dataloader)
     avg_dice /= len(dataloader)
@@ -244,9 +234,7 @@ def train(
         # Save best checkpoint
         if best["dice"] < val_dice:
             print("-------------------------------")
-            print(
-                f'new best!!! (loss: {best["loss"]:>5f} -> {val_loss:>5f}, dice: {best["dice"]:>5f} -> {val_dice:>5f})'
-            )
+            print(f'new best!!! (loss: {best["loss"]:>5f} -> {val_loss:>5f}, dice: {best["dice"]:>5f} -> {val_dice:>5f})')
 
             torch.save(model_checkpoint, "outputs/best.pt")
 
@@ -285,9 +273,7 @@ def train(
     )
 
     if opt.use_wandb:
-        artifact = wandb.Artifact(
-            "best_model", type="model", metadata={"val_dice": val_dice}
-        )
+        artifact = wandb.Artifact("best_model", type="model", metadata={"val_dice": val_dice})
         artifact.add_file("outputs/best.pt")
         wandb.run.log_artifact(artifact)
         wandb.finish()
@@ -349,9 +335,7 @@ def main():
 
     # Initialize optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, patience=3, factor=0.1
-    )
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.1)
 
     # Load pretrained model
     if args.model_path and config["training"] == "clicks":

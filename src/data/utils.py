@@ -16,7 +16,7 @@ def _get_glioma_indices(mask: torch.Tensor) -> tuple[int, int]:
 
     # first = torch.nonzero((mask == 1))[:, 0][0].item()
     # last = torch.nonzero((mask == 1))[:, 0][-1].item()
-    glioma_indices = torch.nonzero((mask == 0))[:, 0]
+    glioma_indices = torch.nonzero((mask == 1))[:, 0]
     if len(glioma_indices) == 0:
         return 0, 0
 
@@ -84,16 +84,10 @@ def generate_clicks(mask: torch.Tensor, fg=False, bg=False, border=False, clicks
     fg_clicks = np.zeros_like(mask)
     border_clicks = np.zeros_like(mask)
     for slice in range(first, last):
-        erosion_kernel = cv2.getStructuringElement(
-            shape=cv2.MORPH_ELLIPSE, ksize=(3, 3)
-        )
-        dilatation_kernel = cv2.getStructuringElement(
-            shape=cv2.MORPH_ELLIPSE, ksize=(17, 17)
-        )
+        erosion_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(3, 3))
+        dilatation_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(17, 17))
         eroded_seg = cv2.erode(mask[slice, :, :], kernel=erosion_kernel)
-        dilated_seg = cv2.dilate(
-            mask[slice, :, :], kernel=dilatation_kernel, iterations=4
-        )
+        dilated_seg = cv2.dilate(mask[slice, :, :], kernel=dilatation_kernel, iterations=4)
 
         diff = mask[slice, :, :] - eroded_seg
         diff2 = dilated_seg - mask[slice, :, :]

@@ -3,29 +3,27 @@ from torch import nn
 import torch.nn.functional as F
 
 
-def dice_coefficient(y_pred: torch.Tensor, y_true: torch.Tensor, eps=1e-6):
-    """Computes the dice coeff. for each class by summing over the depth, height, and width."""
+def dice_coefficient(y_pred: torch.Tensor, y_true: torch.Tensor, eps=1e-6) -> torch.Tensor:
+    """Computes the dice coeff. by summing over the height and width."""
 
-    # sum for each element in batch
+    # sum for each image in batch
     intersection = torch.sum(y_pred * y_true, dim=[2, 3, 4])
-    union = torch.sum(y_pred, dim=[2, 3, 4]) + torch.sum(y_true, dim=[2, 3, 4])
+    union = torch.sum(y_pred + y_true, dim=[2, 3, 4])
     dice = (2.0 * intersection + eps) / (union + eps)
-    # print(dice.shape)
 
-    # mean for the whole batch
+    # mean of the whole batch
     return dice.mean()
 
 
-def dice_coefficient2d(y_pred: torch.Tensor, y_true: torch.Tensor, eps=1e-6):
-    """Computes the dice coeff. for each class by summing over the depth, height, and width."""
+def dice_coefficient2d(y_pred: torch.Tensor, y_true: torch.Tensor, eps=1e-6) -> torch.Tensor:
+    """Computes the dice coeff. by summing over the depth, height and width."""
 
-    # sum for each element in batch
+    # sum for each volume in batch
     intersection = torch.sum(y_pred * y_true, dim=[2, 3])
-    union = torch.sum(y_pred, dim=[2, 3]) + torch.sum(y_true, dim=[2, 3])
+    union = torch.sum(y_pred + y_true, dim=[2, 3])
     dice = (2.0 * intersection + eps) / (union + eps)
-    # print(dice.shape)
 
-    # mean for the whole batch
+    # mean of the whole batch
     return dice.mean()
 
 

@@ -25,7 +25,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"[Using {device} device]")
 
 
-def prepare_data(data_dir: str) -> MRIDataset:
+def prepare_data(data_dir: str) -> tuple[DataLoader, DataLoader]:
     """Loads the data from `data_dir` and returns `Dataset`."""
 
     t1_list = sorted(glob.glob(os.path.join(data_dir, "VS-*-*/vs_*/*_t1_*")))

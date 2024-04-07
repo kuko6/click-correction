@@ -11,13 +11,11 @@ from torch.utils.data import DataLoader
 from torchinfo import summary
 
 from model.correction import CorrectionUnet
-from data.correction_generator import CorrectionDataloader, CorrectionMRIDataset
+from data.correction_generator import CorrectionDataLoader, CorrectionMRIDataset
 from utils import EarlyStopper
-from losses.dice import dice_coefficient2d
+from losses.dice import dice_coefficient2d, DiceLoss
 from losses.correction import CorrectionLoss
 from options import TrainCorrectionOptions
-# from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss
-# from losses.clicks import DistanceLoss, DistanceLoss2
 
 opt = TrainCorrectionOptions(use_wand=False)
 config = opt.config
@@ -26,7 +24,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "mps")
 print(f"[Using {device} device]")
 
 
-def prepare_data(data_dir: str) -> list[CorrectionMRIDataset, CorrectionMRIDataset]:
+def prepare_data(data_dir: str) -> tuple[CorrectionDataLoader, CorrectionDataLoader]:
     """Loads the data from `data_dir` and returns `Dataset`."""
 
     seg_list = sorted(glob.glob(os.path.join(data_dir, "VS-*-*/vs_*/*_seg_*")))
@@ -42,17 +40,19 @@ def prepare_data(data_dir: str) -> list[CorrectionMRIDataset, CorrectionMRIDatas
         config["img_dims"],
         clicks=config["clicks"],
         cuts=config["cuts"],
+        seed=config["seed"]
     )
     val_data = CorrectionMRIDataset(
         seg_list[:config["val_size"]],
         config["img_dims"],
         clicks=config["clicks"],
         cuts=config["cuts"],
+        seed=config["seed"]
     )
     print(len(train_data), len(val_data))
 
-    train_dataloader = CorrectionDataloader(train_data, batch_size=config["batch_size"])
-    val_dataloader = CorrectionDataloader(val_data, batch_size=config["batch_size"])
+    train_dataloader = CorrectionDataLoader(train_data, batch_size=config["batch_size"])
+    val_dataloader = CorrectionDataLoader(val_data, batch_size=config["batch_size"])
 
     # print(train_data[0])
     # for i, (x, y) in enumerate(train_dataloader):
@@ -82,6 +82,7 @@ def val(dataloader: DataLoader, model: CorrectionUnet, loss_fn: torch.nn.Module,
 
     model.eval()
     avg_loss, avg_dice = 0, 0
+    dataloader_size = len(dataloader)
     with torch.no_grad():
         for i, (x, y) in enumerate(dataloader):
             x, y = x.to(device), y.to(device)
@@ -94,25 +95,25 @@ def val(dataloader: DataLoader, model: CorrectionUnet, loss_fn: torch.nn.Module,
             avg_loss += loss.item()
             avg_dice += dice.item()
 
-            print(f"validation step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
+            print(f"validation step: {i+1}/{dataloader_size}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
 
             # if i==0:
             #     # preview(y_pred[0], y[0], dice_coefficient2d2d(y_pred, y), epoch)
             #     preview(y_pred[0], y[0], dice.item(), epoch)
 
-    avg_loss /= len(dataloader)
-    avg_dice /= len(dataloader)
+    avg_loss /= dataloader_size
+    avg_dice /= dataloader_size
     print()
 
     return (avg_loss, avg_dice)
 
 
-def train_one_epoch(dataloader: CorrectionDataloader, model: CorrectionUnet, loss_fn: torch.nn.Module, optimizer, epoch) -> tuple[float, float]:
+def train_one_epoch(dataloader: CorrectionDataLoader, model: CorrectionUnet, loss_fn: torch.nn.Module, optimizer, epoch) -> tuple[float, float]:
     """Train model for one epoch on the training dataset, returns the avg. loss and avg. dice."""
 
     model.train()
     avg_loss, avg_dice = 0, 0
-
+    dataloader_size = len(dataloader)
     for i, (x, y) in enumerate(dataloader):
         x, y = x.to(device), y.to(device)
         optimizer.zero_grad()
@@ -123,8 +124,8 @@ def train_one_epoch(dataloader: CorrectionDataloader, model: CorrectionUnet, los
         # Compute loss and dice coefficient
         loss = loss_fn(y_pred, y)
         dice = dice_coefficient2d(y_pred, y)
-        print(loss.shape)
-        print(dice.shape)
+        # print(loss.shape)
+        # print(dice.shape)
 
         avg_loss += loss.item()
         avg_dice += dice.item()
@@ -133,17 +134,17 @@ def train_one_epoch(dataloader: CorrectionDataloader, model: CorrectionUnet, los
         loss.backward()
         optimizer.step()
 
-        print(f"training step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
+        print(f"training step: {i+1}/{dataloader_size}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
 
-    avg_loss /= len(dataloader)
-    avg_dice /= len(dataloader)
+    avg_loss /= dataloader_size
+    avg_dice /= dataloader_size
     print()
 
     return (avg_loss, avg_dice)
 
 
 def train(
-    train_dataloader: CorrectionDataloader, 
+    train_dataloader: CorrectionDataLoader, 
     val_dataloader: DataLoader,
     model: CorrectionUnet, 
     loss_fn, 
@@ -301,8 +302,12 @@ def main():
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.1)
 
     # Select loss function
-    # loss_fn = DiceLoss(volumetric=False)
-    loss_fn = CorrectionLoss(dims=(1, 32, 32), device=device, batch_size=config["batch_size"])
+    loss_functions = {
+        "dice": DiceLoss(volumetric=False),
+        "correction": CorrectionLoss(dims=(1, 32, 32), device=device, batch_size=config["batch_size"])
+    }
+
+    loss_fn = loss_functions[config["loss"]]
 
     # for i, (x, y) in enumerate(train_dataloader):
     #     print(i, y.shape)

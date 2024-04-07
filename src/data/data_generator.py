@@ -36,12 +36,14 @@ class MRIDataset(Dataset):
         seg_list: tuple[str],
         img_dims: tuple[int],
         clicks=None,
+        seed=None
     ):
         self.t1_list = t1_list
         self.t2_list = t2_list
         self.seg_list = seg_list
         self.img_dims = img_dims
         self.clicks = clicks
+        self.seed = seed
 
     def __len__(self):
         return len(self.t1_list)
@@ -113,6 +115,7 @@ class MRIDataset(Dataset):
                 border=self.clicks["gen_border"],
                 clicks_num=self.clicks["num"],
                 clicks_dst=self.clicks.get("dst") or 4,
+                seed=self.seed
             )
 
             # seg = seg.unsqueeze(0)

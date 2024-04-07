@@ -1,3 +1,5 @@
+import numpy as np
+
 class TrainOptions:
     """Configuration used for training basic segmentation models."""
 
@@ -28,6 +30,7 @@ class TrainOptions:
                 "num": 10,
                 "dst": 4,
             },
+            "seed": 420
         }
 
 
@@ -43,20 +46,21 @@ class TrainCorrectionOptions:
             "conv_blocks": 3,  # 3 if device == 'cpu' else 4
             "dataset": "Schwannoma",
             "epochs": 40,
-            "batch_size": 2,
-            "loss": "dice",
+            "batch_size": 8,
+            "loss": "correction",
             "optimizer": "Adam",
             "augment": False,
             "scheduler": True,
             "early_stopper": True,
             "img_dims": (256, 256),
             "training": "base",  # base, clicks-pretraining, clicks
-            "train_size": 40,
-            "val_size": 10,
+            "train_size": 64,
+            "val_size": 16,
             "clicks": {"num": 3, "dst": 10},
             "cuts": {
-                "num": 12,  # np.inf
+                "num": np.inf,  # np.inf
                 "size": 32,
                 "random": False,
             },
+            "seed": 420
         }

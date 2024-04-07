@@ -9,17 +9,18 @@ from torch.utils.data import Dataset
 import torchvision.transforms.functional as TF
 
 from .utils import generate_clicks
-# from utils import generate_clicks
+# from utils import generate_clicks
 
 
 class CorrectionMRIDataset(Dataset):
     """Torch Dataset which returns 2d cuts with and without errors."""
 
-    def __init__(self, seg_list: tuple[str], img_dims: tuple[int], clicks, cuts):
+    def __init__(self, seg_list: tuple[str], img_dims: tuple[int], clicks, cuts, seed=None):
         self.seg_list = seg_list
         self.img_dims = img_dims
         self.clicks = clicks
         self.cuts = cuts
+        self.seed = seed
 
     def __len__(self):
         return len(self.seg_list)
@@ -74,14 +75,17 @@ class CorrectionMRIDataset(Dataset):
 
         # cuts, _ = cut_volume(label, cut_size=cut_size, num=num)
         erosion_kernel = cv2.getStructuringElement(shape=cv2.MORPH_RECT, ksize=(5, 5))
-        dilatation_kernel = cv2.getStructuringElement(
-            shape=cv2.MORPH_ELLIPSE, ksize=(5, 5)
-        )
+        dilatation_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(5, 5))
 
         faked_cuts = []
+        if self.seed is not None:
+            rng = np.random.default_rng(seed=self.seed)
+        else:
+            rng = np.random.default_rng()
+
         # Iterate over generated cuts and either erode or dilate the segmentation
         for cut in cuts:
-            pp = np.random.uniform(low=0.0, high=1.0)
+            pp = rng.uniform(low=0.0, high=1.0)
 
             if 0.5 > pp:
                 cut = cv2.erode(cut.numpy(), kernel=erosion_kernel, iterations=1)
@@ -123,6 +127,7 @@ class CorrectionMRIDataset(Dataset):
             border=True,
             clicks_num=self.clicks["num"],
             clicks_dst=self.clicks.get("dst") or 4,
+            seed=self.seed
         )
         seg = torch.stack((seg, clicks))
 
@@ -137,7 +142,7 @@ class CorrectionMRIDataset(Dataset):
         return faked_cuts, cuts
 
 
-class CorrectionDataloader:
+class CorrectionDataLoader:
     """Custom dataloader for iterating over the `CorrectionDatates`."""
 
     def __init__(self, dataset: Dataset, batch_size: int):
@@ -145,16 +150,23 @@ class CorrectionDataloader:
         self.batch_size = batch_size
 
     def __len__(self):
-        return len(self.dataset)
+        data_length = 0
+        for data in self.dataset:
+            if len(data[0]) % self.batch_size > 0:
+                data_length += (len(data[0])//self.batch_size + 1)
+            else:
+                data_length += len(data[0])//self.batch_size
+        return data_length
+        # return len(self.dataset)
 
     def __iter__(self):
         # Iterate over the dataset
         for data in self.dataset:
+            # print(len(data), len(data[0]))
             # Iterate over the generated cuts and yield them in batches
-            for batch_idx in range(0, len(data), self.batch_size):
+            for batch_idx in range(0, len(data[0]), self.batch_size):
                 faked_batch = torch.stack(data[0][batch_idx : batch_idx + self.batch_size])
                 batch = torch.stack(data[1][batch_idx : batch_idx + self.batch_size])
-
                 yield faked_batch, batch
 
 
@@ -165,20 +177,22 @@ if __name__ == "__main__":
     seg_list = glob.glob(os.path.join(data_path, "VS-*-*/vs_*/*_seg_*"))
 
     data = CorrectionMRIDataset(
-        ["data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz", 
-         "data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz"],
+        # ["data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz", 
+        #  "data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz"],
+        seg_list[:4],
         (256, 256),
         clicks={"num": 3, "dst": 10},
         cuts={
-            "num": np.inf,
+            "num": 32,
             "size": 32,
             "random": False,
         },
+        seed=690
     )
-    faked_cuts, cuts = data[0]
-    print(type(cuts))
-    print(len(cuts))
-    print(cuts[0].shape)
+    # faked_cuts, cuts = data[0]
+    # print(type(cuts))
+    # print(len(cuts))
+    # print(cuts[0].shape)
 
     # batch_size = 4
     # batches = [seg[i:i+batch_size] for i in range(0, len(seg), batch_size)]
@@ -186,9 +200,11 @@ if __name__ == "__main__":
     # print(len(batch_tensors))
     # print(batch_tensors[0].shape)
 
-    for i, d in enumerate(data):
-        print(i, type(d[0][0]))
+    # for i, d in enumerate(data):
+    #     print(i, type(d[0][0]))
 
-    # dataloader = CorrectionDataloader(data, 4)
-    # for i, (x, y) in enumerate(dataloader):
-    #     print(i, x.shape, y.shape)
+    dataloader = CorrectionDataLoader(data, batch_size=4)
+    total = len(dataloader)
+    for i, (x, y) in enumerate(dataloader):
+        print(f"{i+1}/{total}, {x.shape}, {y.shape}")
+    print(len(dataloader))

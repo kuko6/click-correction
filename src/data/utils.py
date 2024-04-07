@@ -62,7 +62,7 @@ def _select_points(coords: list[list[int]], n: int, d: int) -> list[list[int]]:
     return valid_points
 
 
-def generate_clicks(mask: torch.Tensor, fg=False, bg=False, border=False, clicks_num=2, clicks_dst=4) -> torch.Tensor:
+def generate_clicks(mask: torch.Tensor, fg=False, bg=False, border=False, clicks_num=2, clicks_dst=4, seed=None) -> torch.Tensor:
     """
     Generate click masks.
 
@@ -73,12 +73,18 @@ def generate_clicks(mask: torch.Tensor, fg=False, bg=False, border=False, clicks
         border (bool): whether to generate points on the border
         clicks_num (int): number of points to generate
         clicks_dst (int): minimal distance between points
+        seed (int | None): seed used for rng
     Returns:
         Tensor: tensors of generated points with the same shape as `mask`
     """
 
     first, last = _get_glioma_indices(mask)
     mask = mask.numpy()
+
+    if seed is not None:
+        rng = np.random.default_rng(seed=seed)
+    else: 
+        rng = np.random.default_rng()
 
     bg_clicks = np.zeros_like(mask)
     fg_clicks = np.zeros_like(mask)
@@ -94,19 +100,19 @@ def generate_clicks(mask: torch.Tensor, fg=False, bg=False, border=False, clicks
 
         border_idx = np.where(diff == 1)
         border_coords = list(zip(*border_idx))
-        np.random.shuffle(border_coords)
+        rng.shuffle(border_coords)
 
         # Get fg coordinates
         inner_idx = np.where(mask[slice, :, :] == 1)
         inner_coords = list(zip(*inner_idx))
         inner_coords = list(set(inner_coords) - set(border_coords))
-        np.random.shuffle(inner_coords)
+        rng.shuffle(inner_coords)
 
         # Get bg coordinates
         outer_idx = np.where(diff2 == 1)
         outer_coords = list(zip(*outer_idx))
         outer_coords = list(set(outer_coords) - set(inner_coords))
-        np.random.shuffle(outer_coords)
+        rng.shuffle(outer_coords)
 
         # Add border clicks
         if border:

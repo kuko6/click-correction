@@ -1,3 +1,6 @@
+# OUTDATED !!! #
+# TODO: fix
+
 import argparse
 import glob
 import json

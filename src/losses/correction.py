@@ -3,7 +3,7 @@ from torch import nn
 import scipy
 import numpy as np
 
-# from losses.dice import dice_coefficient2d
+# from losses.dice import dice_coefficient
 
 
 def _get_weight_map(dims: tuple[int], min_thresh=9, max_thresh=20, inverted=False) -> torch.Tensor:
@@ -72,7 +72,7 @@ class CorrectionLoss(nn.Module):
         # self.weight_map = torch.stack((self.weight_map, self.weight_map))
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
-        # loss = 1 - dice_coefficient2d(y_pred, y_true)
+        # loss = 1 - dice_coefficient(y_pred, y_true)
         loss = 1 - weighted_coefficient(y_pred, y_true, self.weight_map)
 
         return loss

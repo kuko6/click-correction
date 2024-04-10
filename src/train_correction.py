@@ -13,7 +13,7 @@ from torchinfo import summary
 from model.correction import CorrectionUnet
 from data.correction_generator import CorrectionDataLoader, CorrectionMRIDataset
 from utils import EarlyStopper
-from losses.dice import dice_coefficient2d, DiceLoss
+from losses.dice import dice_coefficient, DiceLoss
 from losses.correction import CorrectionLoss
 from options import TrainCorrectionOptions
 
@@ -90,7 +90,7 @@ def val(dataloader: DataLoader, model: CorrectionUnet, loss_fn: torch.nn.Module,
 
             # Compute loss and dice coefficient
             loss = loss_fn(y_pred, y)
-            dice = dice_coefficient2d(y_pred, y)
+            dice = dice_coefficient(y_pred, y)
 
             avg_loss += loss.item()
             avg_dice += dice.item()
@@ -123,7 +123,7 @@ def train_one_epoch(dataloader: CorrectionDataLoader, model: CorrectionUnet, los
 
         # Compute loss and dice coefficient
         loss = loss_fn(y_pred, y)
-        dice = dice_coefficient2d(y_pred, y)
+        dice = dice_coefficient(y_pred, y)
         # print(loss.shape)
         # print(dice.shape)
 
@@ -305,7 +305,7 @@ def main():
 
     # Select loss function
     loss_functions = {
-        "dice": DiceLoss(volumetric=False),
+        "dice": DiceLoss(),
         "correction": CorrectionLoss(dims=(1, 32, 32), device=device, batch_size=config["batch_size"], inverted=False),
         "invertedCorrection": CorrectionLoss(dims=(1, 32, 32), device=device, batch_size=config["batch_size"], inverted=True)
     }

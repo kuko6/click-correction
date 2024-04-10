@@ -11,6 +11,7 @@ class TrainOptions:
             "num_classes": 1,
             "conv_blocks": 3,  # 3 if device == 'cpu' else 4
             "dataset": "Schwannoma",
+            "name": None,
             "epochs": 40,
             "batch_size": 2,
             "loss": "dice",
@@ -45,17 +46,17 @@ class TrainCorrectionOptions:
             "num_classes": 1,
             "conv_blocks": 3,  # 3 if device == 'cpu' else 4
             "dataset": "Schwannoma",
-            "epochs": 40,
-            "batch_size": 8,
+            "name": "correctionloss_32imgs",
+            "epochs": 100,
+            "batch_size": 4,
             "loss": "correction",
             "optimizer": "Adam",
             "augment": False,
             "scheduler": True,
             "early_stopper": True,
             "img_dims": (256, 256),
-            "training": "base",  # base, clicks-pretraining, clicks
-            "train_size": 64,
-            "val_size": 16,
+            "train_size": 32,
+            "val_size": 8,
             "clicks": {"num": 3, "dst": 10},
             "cuts": {
                 "num": np.inf,  # np.inf

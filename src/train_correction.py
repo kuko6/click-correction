@@ -17,7 +17,7 @@ from losses.dice import dice_coefficient2d, DiceLoss
 from losses.correction import CorrectionLoss
 from options import TrainCorrectionOptions
 
-opt = TrainCorrectionOptions(use_wand=False)
+opt = TrainCorrectionOptions(use_wand=True)
 config = opt.config
 
 device = torch.device("cuda" if torch.cuda.is_available() else "mps")
@@ -43,7 +43,7 @@ def prepare_data(data_dir: str) -> tuple[CorrectionDataLoader, CorrectionDataLoa
         seed=config["seed"]
     )
     val_data = CorrectionMRIDataset(
-        seg_list[:config["val_size"]],
+        seg_val[:config["val_size"]],
         config["img_dims"],
         clicks=config["clicks"],
         cuts=config["cuts"],
@@ -60,19 +60,19 @@ def prepare_data(data_dir: str) -> tuple[CorrectionDataLoader, CorrectionDataLoa
     #     break
 
     # TODO: format the output
-    # np.savetxt(
-    #     "outputs/training_files.csv",
-    #     [('seg')]+list(zip(seg_train)),
-    #     delimiter =", ",
-    #     fmt ='% s'
-    # )
+    np.savetxt(
+        "outputs/training_files.csv",
+        [('seg')]+list(seg_train[:config["train_size"]]),
+        delimiter =", ",
+        fmt ='% s'
+    )
 
-    # np.savetxt(
-    #     "outputs/validation_files.csv",
-    #     [('seg')]+list(zip(seg_val)),
-    #     delimiter =", ",
-    #     fmt ='% s'
-    # )
+    np.savetxt(
+        "outputs/validation_files.csv",
+        [('seg')]+list(seg_val[:config["val_size"]]),
+        delimiter =", ",
+        fmt ='% s'
+    )
 
     return train_dataloader, val_dataloader
 
@@ -183,9 +183,9 @@ def train(
         val_history["loss"].append(val_loss)
         val_history["dice"].append(val_dice)
 
-        with open("outputs/train_history.json", "w") as f:
+        with open(f"outputs/{config['name']}/train_history.json", "w") as f:
             json.dump(train_history, f)
-        with open("outputs/val_history.json", "w") as f:
+        with open(f"outputs/{config['name']}/val_history.json", "w") as f:
             json.dump(val_history, f)
 
         # Save checkpoint
@@ -195,14 +195,14 @@ def train(
             "optimizer_state": optimizer.state_dict(),
         }
 
-        torch.save(model_checkpoint, "outputs/checkpoint.pt")
+        torch.save(model_checkpoint, f"outputs/{config['name']}/checkpoint.pt")
 
         # Save best checkpoint
         if best["dice"] < val_dice:
             print("-------------------------------")
             print(f'new best!!! (loss: {best["loss"]:>5f} -> {val_loss:>5f}, dice: {best["dice"]:>5f} -> {val_dice:>5f})')
 
-            torch.save(model_checkpoint, "outputs/best.pt")
+            torch.save(model_checkpoint, f"outputs/{config['name']}/best.pt")
 
             best["dice"] = val_dice
             best["loss"] = val_loss
@@ -221,7 +221,7 @@ def train(
                     "lr": optimizer.param_groups[0]["lr"],
                 }
             )
-            wandb.log({"preview": wandb.Image(f"outputs/images/{epoch}_preview.png")})
+            # wandb.log({"preview": wandb.Image(f"outputs/images/{epoch}_preview.png")})
 
         # Run scheduler and early stopper
         if config["scheduler"]:
@@ -238,7 +238,7 @@ def train(
 
     if opt.use_wandb:
         artifact = wandb.Artifact("best_model", type="model", metadata={"val_dice": val_dice})
-        artifact.add_file("outputs/best.pt")
+        artifact.add_file(f"outputs/{config['name']}/best.pt")
         wandb.run.log_artifact(artifact)
         wandb.finish()
 
@@ -260,13 +260,15 @@ def main():
     wandb_key = args.wandb
     if opt.use_wandb and wandb_key:
         wandb.login(key=wandb_key)
-        wandb.init(project="DP", entity="kuko", reinit=True, config=config)
+        wandb.init(project="DP", entity="kuko", reinit=True, name=config['name'], config=config)
 
     data_dir = args.data_path
     print(os.listdir(data_dir))
 
     if not os.path.isdir("outputs"):
         os.mkdir("outputs")
+    if not os.path.isdir(f"outputs/{config['name']}"):
+        os.mkdir(f"outputs/{config['name']}")
     if not os.path.isdir("outputs/images"):
         os.mkdir("outputs/images")
 
@@ -304,7 +306,8 @@ def main():
     # Select loss function
     loss_functions = {
         "dice": DiceLoss(volumetric=False),
-        "correction": CorrectionLoss(dims=(1, 32, 32), device=device, batch_size=config["batch_size"])
+        "correction": CorrectionLoss(dims=(1, 32, 32), device=device, batch_size=config["batch_size"], inverted=False),
+        "invertedCorrection": CorrectionLoss(dims=(1, 32, 32), device=device, batch_size=config["batch_size"], inverted=True)
     }
 
     loss_fn = loss_functions[config["loss"]]

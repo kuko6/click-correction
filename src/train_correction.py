@@ -2,7 +2,7 @@ import argparse
 import os
 import glob
 import wandb
-import json
+# import json
 
 from sklearn.model_selection import train_test_split
 import numpy as np
@@ -12,7 +12,7 @@ from torchinfo import summary
 
 from model.correction import CorrectionUnet
 from data.correction_generator import CorrectionDataLoader, CorrectionMRIDataset
-from utils import EarlyStopper
+from utils import EarlyStopper, make_output_dirs, preview_cuts, record_used_files, save_history
 from losses.dice import dice_coefficient, DiceLoss
 from losses.correction import CorrectionLoss
 from options import TrainCorrectionOptions
@@ -31,9 +31,6 @@ def prepare_data(data_dir: str) -> tuple[CorrectionDataLoader, CorrectionDataLoa
     
     seg_train, seg_val = train_test_split(seg_list, test_size=0.2, train_size=0.8, random_state=420)
     seg_val.append(seg_train.pop(-1))
-
-    # if config['clicks']['use']:
-    #     preview_clicks(t1_list, t2_list, seg_list, config['clicks'])
 
     train_data = CorrectionMRIDataset(
         seg_train[:config["train_size"]],
@@ -54,30 +51,18 @@ def prepare_data(data_dir: str) -> tuple[CorrectionDataLoader, CorrectionDataLoa
     train_dataloader = CorrectionDataLoader(train_data, batch_size=config["batch_size"])
     val_dataloader = CorrectionDataLoader(val_data, batch_size=config["batch_size"])
 
-    # print(train_data[0])
-    # for i, (x, y) in enumerate(train_dataloader):
-    #     print(i)
-    #     break
+    print(len(train_dataloader), len(val_dataloader))
 
-    # TODO: format the output
-    np.savetxt(
-        "outputs/training_files.csv",
-        [('seg')]+list(seg_train[:config["train_size"]]),
-        delimiter =", ",
-        fmt ='% s'
-    )
-
-    np.savetxt(
-        "outputs/validation_files.csv",
-        [('seg')]+list(seg_val[:config["val_size"]]),
-        delimiter =", ",
-        fmt ='% s'
+    record_used_files(
+        path="outputs", 
+        labels=("seg"), 
+        files=[seg_train[:config["train_size"]], seg_val[:config["val_size"]]]
     )
 
     return train_dataloader, val_dataloader
 
 
-def val(dataloader: DataLoader, model: CorrectionUnet, loss_fn: torch.nn.Module, epoch: int) -> tuple[float, float]:
+def val(dataloader: CorrectionDataLoader, model: CorrectionUnet, loss_fn: torch.nn.Module, epoch: int) -> tuple[float, float]:
     """Validate model after each epoch on validation dataset, returns the avg. loss and avg. dice."""
 
     model.eval()
@@ -97,9 +82,8 @@ def val(dataloader: DataLoader, model: CorrectionUnet, loss_fn: torch.nn.Module,
 
             print(f"validation step: {i+1}/{dataloader_size}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
 
-            # if i==0:
-            #     # preview(y_pred[0], y[0], dice_coefficient2d2d(y_pred, y), epoch)
-            #     preview(y_pred[0], y[0], dice.item(), epoch)
+            if i==0:
+                preview_cuts(y_pred, x, y, dice.item(), epoch)
 
     avg_loss /= dataloader_size
     avg_dice /= dataloader_size
@@ -183,10 +167,7 @@ def train(
         val_history["loss"].append(val_loss)
         val_history["dice"].append(val_dice)
 
-        with open(f"outputs/{config['name']}/train_history.json", "w") as f:
-            json.dump(train_history, f)
-        with open(f"outputs/{config['name']}/val_history.json", "w") as f:
-            json.dump(val_history, f)
+        save_history(f"outputs/{config['name']}", train_history, val_history)
 
         # Save checkpoint
         model_checkpoint = {
@@ -260,17 +241,19 @@ def main():
     wandb_key = args.wandb
     if opt.use_wandb and wandb_key:
         wandb.login(key=wandb_key)
-        wandb.init(project="DP", entity="kuko", reinit=True, name=config['name'], config=config)
+        wandb.init(
+            project="DP",
+            entity="kuko",
+            reinit=True,
+            name=config["name"],
+            config=config,
+            tags=config["tags"],
+        )
 
     data_dir = args.data_path
     print(os.listdir(data_dir))
 
-    if not os.path.isdir("outputs"):
-        os.mkdir("outputs")
-    if not os.path.isdir(f"outputs/{config['name']}"):
-        os.mkdir(f"outputs/{config['name']}")
-    if not os.path.isdir("outputs/images"):
-        os.mkdir("outputs/images")
+    make_output_dirs(["outputs", "outputs/images", f"outputs/{config['name']}"])
 
     # Prepare Datasets
     train_dataloader, val_dataloader = prepare_data(data_dir)
@@ -311,10 +294,6 @@ def main():
     }
 
     loss_fn = loss_functions[config["loss"]]
-
-    # for i, (x, y) in enumerate(train_dataloader):
-    #     print(i, y.shape)
-    #     return
 
     # Train :D
     train(train_dataloader, val_dataloader, model, loss_fn, optimizer, scheduler)

@@ -2,7 +2,7 @@ import argparse
 import os
 import glob
 import wandb
-import json
+# import json
 
 from sklearn.model_selection import train_test_split
 import numpy as np
@@ -12,13 +12,13 @@ from torchinfo import summary
 
 from model.segmentation import Unet
 from data.data_generator import MRIDataset
-from utils import EarlyStopper, preview
+from utils import EarlyStopper, make_output_dirs, preview, record_used_files, save_history
 from losses.dice import dice_coefficient, DiceLoss, DiceBCELoss
 from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss
 from losses.clicks import DistanceLoss, DistanceLoss2
 from options import TrainOptions
 
-opt = TrainOptions(use_wand=False)
+opt = TrainOptions(use_wand=True)
 config = opt.config
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -64,8 +64,6 @@ def prepare_data(data_dir: str) -> tuple[DataLoader, DataLoader]:
             config["img_dims"],
             clicks=config["clicks"],
         )
-        # train_data = MRIDataset(t1_train, t2_train, seg_train, config['img_dims'], clicks=config['clicks'])
-        # val_data = MRIDataset(t1_val, t2_val, seg_val, config['img_dims'])
     elif config["training"] == "clicks-pretraining":
         train_data = MRIDataset(
             t1_train[:config["train_size"]],
@@ -88,19 +86,10 @@ def prepare_data(data_dir: str) -> tuple[DataLoader, DataLoader]:
     train_dataloader = DataLoader(train_data, batch_size=config["batch_size"], shuffle=True)
     val_dataloader = DataLoader(val_data, batch_size=config["batch_size"], shuffle=False)
 
-    # TODO: format the output
-    np.savetxt(
-        "outputs/training_files.csv",
-        [("t1", "t2", "seg")] + list(zip(t1_train, t2_train, seg_train)),
-        delimiter=", ",
-        fmt="% s",
-    )
-
-    np.savetxt(
-        "outputs/validation_files.csv",
-        [("t1", "t2", "seg")] + list(zip(t1_val, t2_val, seg_val)),
-        delimiter=", ",
-        fmt="% s",
+    record_used_files(
+        path="outputs", 
+        labels=["t1", "t2", "seg"], 
+        files=[zip(t1_train, t2_train, seg_train), zip(t1_val, t2_val, seg_val)]
     )
 
     return train_dataloader, val_dataloader
@@ -217,10 +206,7 @@ def train(
         val_history["loss"].append(val_loss)
         val_history["dice"].append(val_dice)
 
-        with open("outputs/train_history.json", "w") as f:
-            json.dump(train_history, f)
-        with open("outputs/val_history.json", "w") as f:
-            json.dump(val_history, f)
+        save_history(f"outputs/{config['name']}", train_history, val_history)
 
         # Save checkpoint
         model_checkpoint = {
@@ -229,14 +215,14 @@ def train(
             "optimizer_state": optimizer.state_dict(),
         }
 
-        torch.save(model_checkpoint, "outputs/checkpoint.pt")
+        torch.save(model_checkpoint, f"outputs/{config['name']}/checkpoint.pt")
 
         # Save best checkpoint
         if best["dice"] < val_dice:
             print("-------------------------------")
             print(f'new best!!! (loss: {best["loss"]:>5f} -> {val_loss:>5f}, dice: {best["dice"]:>5f} -> {val_dice:>5f})')
 
-            torch.save(model_checkpoint, "outputs/best.pt")
+            torch.save(model_checkpoint, f"outputs/{config['name']}/best.pt")
 
             best["dice"] = val_dice
             best["loss"] = val_loss
@@ -274,7 +260,7 @@ def train(
 
     if opt.use_wandb:
         artifact = wandb.Artifact("best_model", type="model", metadata={"val_dice": val_dice})
-        artifact.add_file("outputs/best.pt")
+        artifact.add_file(f"outputs/{config['name']}/best.pt")
         wandb.run.log_artifact(artifact)
         wandb.finish()
 
@@ -296,15 +282,19 @@ def main():
     wandb_key = args.wandb
     if opt.use_wandb and wandb_key:
         wandb.login(key=wandb_key)
-        wandb.init(project="DP", entity="kuko", reinit=True, config=config)
+        wandb.init(
+            project="DP",
+            entity="kuko",
+            reinit=True,
+            name=config["name"],
+            config=config,
+            tags=config["tags"],
+        )
 
     data_dir = args.data_path
     print(os.listdir(data_dir))
 
-    if not os.path.isdir("outputs"):
-        os.mkdir("outputs")
-    if not os.path.isdir("outputs/images"):
-        os.mkdir("outputs/images")
+    make_output_dirs(["outputs", "outputs/images", f"outputs/{config['name']}"])
 
     # Prepare Datasets
     train_dataloader, val_dataloader = prepare_data(data_dir)

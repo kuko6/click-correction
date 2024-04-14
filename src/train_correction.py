@@ -28,15 +28,16 @@ def prepare_data(data_dir: str) -> tuple[CorrectionDataLoader, CorrectionDataLoa
     """Loads the data from `data_dir` and returns `Dataset`."""
 
     seg_list = sorted(glob.glob(os.path.join(data_dir, "VS-*-*/vs_*/*_seg_*")))
-    
     seg_train, seg_val = train_test_split(seg_list, test_size=0.2, train_size=0.8, random_state=420)
-    seg_val.append(seg_train.pop(-1))
-
+    
     train_data = CorrectionMRIDataset(
         seg_train[:config["train_size"]],
         config["img_dims"],
         clicks=config["clicks"],
         cuts=config["cuts"],
+        random=config["random"],
+        include_unchanged=config["include_unchanged"],
+        augment=config["augment"],
         seed=config["seed"]
     )
     val_data = CorrectionMRIDataset(
@@ -44,13 +45,15 @@ def prepare_data(data_dir: str) -> tuple[CorrectionDataLoader, CorrectionDataLoa
         config["img_dims"],
         clicks=config["clicks"],
         cuts=config["cuts"],
+        random=False,
+        include_unchanged=config["include_unchanged"],
+        augment=False,
         seed=config["seed"]
     )
     print(len(train_data), len(val_data))
 
     train_dataloader = CorrectionDataLoader(train_data, batch_size=config["batch_size"])
     val_dataloader = CorrectionDataLoader(val_data, batch_size=config["batch_size"])
-
     print(len(train_dataloader), len(val_dataloader))
 
     record_used_files(
@@ -284,7 +287,7 @@ def main():
 
     # Initialize optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.1)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.5)
 
     # Select loss function
     loss_functions = {

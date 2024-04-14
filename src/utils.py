@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import json
 import os
 from losses.dice import dice_coefficient
+# from .losses.dice import dice_coefficient
 
 # https://stackoverflow.com/a/73704579
 class EarlyStopper:
@@ -23,7 +24,7 @@ class EarlyStopper:
             if value < self.min_value:
                 self.min_value = value
                 self.counter = 0
-            elif value > (self.min_value + self.delta):
+            elif value >= (self.min_value + self.delta):
                 self.counter += 1
                 print("-------------------------------")
                 print(f"early stopping: {self.counter}/{self.patience}")
@@ -32,7 +33,7 @@ class EarlyStopper:
             if value > self.max_value:
                 self.max_value = value
                 self.counter = 0
-            elif value < (self.max_value - self.delta):
+            elif value <= (self.max_value - self.delta):
                 self.counter += 1
                 print("-------------------------------")
                 print(f"early stopping: {self.counter}/{self.patience}")

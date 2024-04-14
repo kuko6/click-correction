@@ -89,7 +89,8 @@ def prepare_data(data_dir: str) -> tuple[DataLoader, DataLoader]:
     record_used_files(
         path="outputs", 
         labels=["t1", "t2", "seg"], 
-        files=[zip(t1_train, t2_train, seg_train), zip(t1_val, t2_val, seg_val)]
+        train_files=list(zip(t1_train, t2_train, seg_train)),
+        val_files=list(zip(t1_val, t2_val, seg_val))
     )
 
     return train_dataloader, val_dataloader
@@ -325,7 +326,7 @@ def main():
 
     # Initialize optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.1)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.5)
 
     # Load pretrained model
     if args.model_path and config["training"] == "clicks":

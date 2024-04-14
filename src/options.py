@@ -12,8 +12,8 @@ class TrainOptions:
             "num_classes": 1,
             "conv_blocks": 3,  # 3 if device == 'cpu' else 4
             "dataset": "Schwannoma",
-            "name": None,
-            "tags": ["clicks"],
+            "name": "pretraining_dice",
+            "tags": ["active-lr"],
             "epochs": 40,
             "batch_size": 2,
             "loss": "dice",
@@ -21,15 +21,15 @@ class TrainOptions:
             "augment": False,
             "scheduler": True,
             "early_stopper": True,
-            "img_dims": (40, 128, 128),  # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
-            "training": "base",  # base, clicks-pretraining, clicks
-            "train_size": 30,
-            "val_size": 10,
+            "img_dims": (40, 256, 256),  # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
+            "training": "clicks-pretraining",  # base, clicks-pretraining, clicks
+            "train_size": 32,
+            "val_size": 8,
             "clicks": {
                 "use": False,
                 "gen_fg": False,
                 "gen_bg": False,
-                "gen_border": True,
+                "gen_border": False,
                 "num": 10,
                 "dst": 4,
             },

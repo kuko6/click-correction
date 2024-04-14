@@ -207,7 +207,7 @@ class CorrectionMRIDataset(Dataset):
 
 
 class CorrectionDataLoader:
-    """Custom dataloader for iterating over the `CorrectionDatates`."""
+    """Custom dataloader for iterating over the `CorrectionDataset`."""
 
     def __init__(self, dataset: Dataset, batch_size: int):
         self.dataset = dataset

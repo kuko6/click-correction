@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import json
 import os
 from losses.dice import dice_coefficient
-# from .losses.dice import dice_coefficient
+# from .losses.dice import dice_coefficient
 
 # https://stackoverflow.com/a/73704579
 class EarlyStopper:
@@ -186,19 +186,19 @@ def save_history(path: str, train_history: dict[str, list], val_history: dict[st
         json.dump(val_history, f)
 
 
-def record_used_files(path: str, labels: list[str], files: list):
+def record_used_files(path: str, labels: list[str], train_files: list, val_files: list):
     """Record files used for training and validation."""
     
     np.savetxt(
         os.path.join(path, "training_files.csv"),
-        [labels] + files[0],
+        [labels] + train_files,
         delimiter=", ",
         fmt="% s",
     )
 
     np.savetxt(
         os.path.join(path, "validation_files.csv"),
-         [labels] + files[1],
+         [labels] + val_files,
         delimiter=", ",
         fmt="% s",
     )

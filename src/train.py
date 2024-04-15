@@ -42,43 +42,29 @@ def prepare_data(data_dir: str) -> tuple[DataLoader, DataLoader]:
     # if config['clicks']['use']:
     #     preview_clicks(t1_list, t2_list, seg_list, config['clicks'])
 
-    if config["training"] == "base":
-        train_data = MRIDataset(
-            t1_train, t2_train, seg_train, config["img_dims"], clicks=config["clicks"]
-        )
-        val_data = MRIDataset(
-            t1_val, t2_val, seg_val, config["img_dims"], clicks=config["clicks"]
-        )
-    elif config["training"] == "clicks":
-        train_data = MRIDataset(
-            t1_train[config["train_size"]:],
-            t2_train[config["train_size"]:],
-            seg_train[config["train_size"]:],
-            config["img_dims"],
-            clicks=config["clicks"],
-        )
-        val_data = MRIDataset(
-            t1_val[config["val_size"]:],
-            t2_val[config["val_size"]:],
-            seg_val[config["val_size"]:],
-            config["img_dims"],
-            clicks=config["clicks"],
-        )
-    elif config["training"] == "clicks-pretraining":
-        train_data = MRIDataset(
-            t1_train[:config["train_size"]],
-            t2_train[:config["train_size"]],
-            seg_train[:config["train_size"]],
-            config["img_dims"],
-            clicks=False,
-        )
-        val_data = MRIDataset(
-            t1_val[:config["val_size"]],
-            t2_val[:config["val_size"]],
-            seg_val[:config["val_size"]],
-            config["img_dims"],
-        )
+    if config["training"] == "clicks":
+        t1_train = t1_train[config["train_size"]:]
+        t2_train = t2_train[config["train_size"]:]
+        seg_train = seg_train[config["train_size"]:]
 
+        t1_val = t1_val[config["val_size"]:]
+        t2_val = t2_val[config["val_size"]:]
+        seg_val = seg_val[config["val_size"]:]
+    elif config["training"] == "clicks-pretraining":
+        t1_train = t1_train[:config["train_size"]]
+        t2_train = t2_train[:config["train_size"]]
+        seg_train = seg_train[:config["train_size"]]
+
+        t1_val = t1_val[:config["val_size"]]
+        t2_val = t2_val[:config["val_size"]]
+        seg_val = seg_val[:config["val_size"]]
+        
+    train_data = MRIDataset(
+        t1_train, t2_train, seg_train, config["img_dims"], clicks=config["clicks"]
+    )
+    val_data = MRIDataset(
+        t1_val, t2_val, seg_val, config["img_dims"], clicks=config["clicks"]
+    )
     print(len(train_data), len(val_data))
     # print(len(t1_train), len(t2_train), len(seg_train))
     # print(len(t1_val), len(t2_val), len(seg_val))

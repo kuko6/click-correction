@@ -12,16 +12,16 @@ class TrainOptions:
             "num_classes": 1,
             "conv_blocks": 3,  # 3 if device == 'cpu' else 4
             "dataset": "Schwannoma",
-            "name": "pretraining_dice",
+            "name": "pretraining_focaltversky_32imgs",
             "tags": ["active-lr"],
-            "epochs": 40,
+            "epochs": 50,
             "batch_size": 2,
-            "loss": "dice",
+            "loss": "focaltversky",
             "optimizer": "Adam",
             "augment": False,
             "scheduler": True,
-            "early_stopper": True,
-            "img_dims": (40, 256, 256),  # (64, 80, 80) if device == 'cpu' else (64, 128, 128)
+            "early_stopper": False,
+            "img_dims": (40, 256, 256), 
             "training": "clicks-pretraining",  # base, clicks-pretraining, clicks
             "train_size": 32,
             "val_size": 8,

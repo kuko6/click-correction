@@ -149,6 +149,7 @@ def preview_cuts(pred: torch.Tensor, x: torch.Tensor, y: torch.Tensor, dice: flo
     fig.savefig(f"outputs/images/{epoch}_preview.png")
     plt.close(fig)
 
+
 def plot_tumour(mask: torch.Tensor):
     """Plot individual slices of the tumour in one figure."""
     

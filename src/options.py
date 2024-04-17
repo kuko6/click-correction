@@ -44,11 +44,11 @@ class TrainCorrectionOptions:
         self.use_wandb = use_wand
         self.config = {
             "lr": 1e-3,
-            "img_channels": 1,
+            "img_channels": 3,
             "num_classes": 1,
             "conv_blocks": 3,
             "dataset": "Schwannoma",
-            "name": "correctionloss_32imgs_stronger_errors_hidden_augment",
+            "name": "correctionloss_64imgs_seq",
             "tags": ["correction"],
             "epochs": 100,
             "batch_size": 4,
@@ -57,8 +57,8 @@ class TrainCorrectionOptions:
             "scheduler": True,
             "early_stopper": False,
             "img_dims": (256, 256),
-            "train_size": 16,
-            "val_size": 4,
+            "train_size": 64,
+            "val_size": 16,
             "clicks": {"num": 5, "dst": 10},
             "cuts": {
                 "num": np.inf,  # np.inf

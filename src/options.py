@@ -4,16 +4,15 @@ import numpy as np
 class TrainOptions:
     """Configuration used for training basic segmentation models."""
 
-    def __init__(self, use_wand=False) -> None:
+    def __init__(self, use_wand=False, name="") -> None:
         self.use_wandb = use_wand
+        self.name = name
+        self.tags = ["active-lr"]
         self.config = {
             "lr": 1e-3,
             "img_channels": 2,
             "num_classes": 1,
             "conv_blocks": 3,  # 3 if device == 'cpu' else 4
-            "dataset": "Schwannoma",
-            "name": "pretraining_focaltversky_32imgs",
-            "tags": ["active-lr"],
             "epochs": 50,
             "batch_size": 2,
             "loss": "focaltversky",
@@ -40,15 +39,16 @@ class TrainOptions:
 class TrainCorrectionOptions:
     """Configuration used for training correction models."""
 
-    def __init__(self, use_wand) -> None:
+    def __init__(self, use_wand=False, name="") -> None:
         self.use_wandb = use_wand
+        self.name = name,
+        self.tags = ["correction"]
         self.config = {
             "lr": 1e-3,
-            "img_channels": 3,
+            "img_channels": 1,
             "num_classes": 1,
             "conv_blocks": 3,
-            "dataset": "Schwannoma",
-            "name": "correctionloss_64imgs_seq",
+            "use_seq": False,
             "tags": ["correction"],
             "epochs": 100,
             "batch_size": 4,

@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import json
 import os
 from losses.dice import dice_coefficient
+import re
 # from .losses.dice import dice_coefficient
 
 # https://stackoverflow.com/a/73704579
@@ -66,7 +67,7 @@ def get_glioma_indices(mask: torch.Tensor) -> tuple[int, int]:
     return first, last
 
 
-def preview(y_pred: torch.Tensor, y: torch.Tensor, dice: float, epoch=0):
+def preview(y_pred: torch.Tensor, y: torch.Tensor, dice: float, output_path: str, epoch=0):
     """Saves a png of sample prediction `y_pred` for scan `y`."""
 
     # Compute number of slices with the tumour
@@ -104,11 +105,11 @@ def preview(y_pred: torch.Tensor, y: torch.Tensor, dice: float, epoch=0):
     fig.suptitle(f"Dice: {dice}", fontsize=10)
     plt.subplots_adjust(top=0.9)
 
-    fig.savefig(f"outputs/images/{epoch}_preview.png")
+    fig.savefig(output_path)
     plt.close(fig)
 
 
-def preview_cuts(pred: torch.Tensor, x: torch.Tensor, y: torch.Tensor, dice: float, epoch=0):
+def preview_cuts(pred: torch.Tensor, x: torch.Tensor, y: torch.Tensor, dice: float, output_path: str, epoch=0):
     """Plot batch of cuts."""
     
     rows = pred.shape[0]
@@ -146,7 +147,7 @@ def preview_cuts(pred: torch.Tensor, x: torch.Tensor, y: torch.Tensor, dice: flo
     fig.suptitle(f"Dice: {dice}", fontsize=10)
     plt.subplots_adjust(top=0.9)
 
-    fig.savefig(f"outputs/images/{epoch}_preview.png")
+    fig.savefig(output_path)
     plt.close(fig)
 
 
@@ -187,9 +188,28 @@ def save_history(path: str, train_history: dict[str, list], val_history: dict[st
         json.dump(val_history, f)
 
 
-def record_used_files(path: str, labels: list[str], train_files: list, val_files: list):
+def record_used_files(path: str, labels: list[str], train_files: list[str], val_files: list[str]):
     """Record files used for training and validation."""
-    
+
+    for i in range(len(train_files)):
+        if len(train_files[i]) == 3:
+            train_files[i] = [
+                re.search(r"VS-\d+-\d+/vs_\w+/\w+_t1_\w+\.nii\.gz", train_files[i][0]).group(),
+                re.search(r"VS-\d+-\d+/vs_\w+/\w+_t2_\w+\.nii\.gz", train_files[i][1]).group(),
+                re.search(r"VS-\d+-\d+/vs_\w+/\w+_seg_\w+\.nii\.gz", train_files[i][2]).group()
+            ]
+
+            if i < len(val_files):
+                val_files[i] = [
+                    re.search(r"VS-\d+-\d+/vs_\w+/\w+_t1_\w+\.nii\.gz", val_files[i][0]).group(),
+                    re.search(r"VS-\d+-\d+/vs_\w+/\w+_t2_\w+\.nii\.gz", val_files[i][1]).group(),
+                    re.search(r"VS-\d+-\d+/vs_\w+/\w+_seg_\w+\.nii\.gz", val_files[i][2]).group()
+                ]
+        else:
+            train_files[i] = re.search(r"VS-\d+-\d+/vs_\w+/\w+_seg_\w+\.nii\.gz", train_files[i]).group()
+            if i < len(val_files):
+                val_files[i] = re.search(r"VS-\d+-\d+/vs_\w+/\w+_seg_\w+\.nii\.gz", val_files[i]).group()
+            
     np.savetxt(
         os.path.join(path, "training_files.csv"),
         [labels] + train_files,

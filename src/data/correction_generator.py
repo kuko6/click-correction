@@ -10,7 +10,171 @@ from torch.utils.data import Dataset
 import torchvision.transforms.functional as TF
 
 from .utils import generate_clicks
-# from utils import generate_clicks
+# from utils import generate_clicks
+
+
+def _cut_volume(volume: torch.Tensor, coords: list[int], cut_size: int) -> torch.Tensor:
+    """ 
+    Create a cut from the given volume in shape (cut_size, cut_size).
+
+    Args:
+        volume (Tensor): volume to cut
+        coords (list of ints): click coordinates
+        cut_size (int): size of the generated cut
+    Returns:
+        tensor: generated cut in shape (cut_size, cut_size)
+    """
+
+    cut = torch.clone(volume[coords[0]])
+    cut = cut[
+        coords[1] - cut_size : coords[1] + cut_size,
+        coords[2] - cut_size : coords[2] + cut_size,
+    ]
+
+    return cut
+
+
+def _cut_volumes(
+    seg: torch.Tensor,
+    clicks: torch.Tensor,
+    t1: torch.Tensor = None,
+    t2: torch.Tensor = None,
+    cut_size=32,
+    num: int = np.inf,
+    random=False,
+    augment=False,
+) -> list[torch.Tensor]:
+    """
+    Generate cuts from the given volumes.
+
+    Args:
+        seg (Tensor): segmentation mask 
+        clicks (Tensor): generated clicks
+        t1 (Tensor): optional t1 volume
+        t2 (Tensor): optional t2 volume
+        cut_size (int): size of the generated cuts
+        num (int): number of cuts to generate
+        random (bool): whether to randomize the cuts or create them in order
+    Returns:
+        list of tensors: list of generated cuts in shape (cut_size, cut_size)
+    """
+
+    cut_size = cut_size // 2  # needed only as a distance from the center
+
+    # Get coordinates of the generated points
+    click_coords = torch.nonzero(clicks)
+
+    # Randomize cuts
+    if random:
+        click_coords = click_coords[torch.randperm(len(click_coords))]
+
+    cuts = []
+    k = num if len(click_coords) > num else len(click_coords)
+    for click_idx in range(0, k):
+        coords = click_coords[click_idx]
+
+        # Cut the volume based on the specified cut size
+        # TODO: try to do all at once
+        if t1 is not None and t2 is not None:
+            seg_cut = _cut_volume(seg, coords, cut_size)
+            t1_cut = _cut_volume(t1, coords, cut_size)
+            t2_cut = _cut_volume(t2, coords, cut_size)
+            cut = torch.stack((seg_cut, t1_cut, t2_cut))
+        else:
+            cut = _cut_volume(seg, coords, cut_size).unsqueeze(0)
+        
+        if augment:
+            cut = _augment(cut)
+
+        cuts.append(cut)
+
+    return cuts
+
+
+def _augment(cut: torch.Tensor) -> torch.Tensor:
+    """ 
+    Rotates and flips provided cut.
+
+    Args:
+        cut (Tensor): preprocessed cut
+    Returns:
+        tensor: augmented cut
+    """
+
+    rng = np.random.default_rng()
+    pp = rng.uniform(low=0.0, high=1.0)
+
+    if pp > 0.8:
+        angle = rng.uniform(low=-90, high=90)
+        cut = TF.rotate(cut, angle)
+    
+    if pp > 0.7:
+        cut = TF.hflip(cut)
+    
+    if pp > 0.6:
+        cut = TF.vflip(cut)
+    
+    return cut
+
+
+def _simulate_errors(cuts: list[torch.Tensor], hide_unchanged=False, seed: int | None =None, cuts_with_seq=False) -> list[torch.Tensor]:
+    """
+    Simulate errors for the generated cuts and return 'erroneous' cuts.
+    
+    Args:
+        cuts (list of tensors): list of generated cuts
+        hide_unchanged (bool): whether to leave some cuts unchanged
+        seed (int): optional seed, which will be used for rng
+        cuts_with_seq (bool): whether the cuts also include sequences
+    Returns:
+        list of tensors: list of simulated erroneous cuts
+    """
+
+    # cuts, _ = cut_volume(label, cut_size=cut_size, num=num)
+    erosion_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(5, 5))
+    dilatation_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(7, 7))
+
+    faked_cuts = []
+    if seed is not None:
+        rng = np.random.default_rng(seed=seed)
+    else:
+        rng = np.random.default_rng()
+
+    # Iterate over generated cuts and either erode or dilate the segmentation
+    for cut in cuts:
+        pp = rng.uniform(low=0.0, high=1.0)
+
+        # "hide" unchanged cuts
+        if hide_unchanged and pp > 0.9:
+            faked_cuts.append(cut)
+            continue
+        
+        tmp_cut = cut
+        if cuts_with_seq:
+            tmp_cut = cut[0]
+
+        # use only 1 iterations for smaller tumours
+        if len(tmp_cut[tmp_cut > 0]) < 250:
+            iterations = 1
+        else:
+            iterations = 2
+        
+        if len(tmp_cut[tmp_cut > 0]) < 50:
+            # only do dilatation, when the tumour is too small
+            tmp_cut = cv2.dilate(tmp_cut.numpy(), kernel=dilatation_kernel, iterations=1)
+        else:
+            if 0.5 > pp:
+                tmp_cut = cv2.erode(tmp_cut.numpy(), kernel=erosion_kernel, iterations=iterations)
+            else:
+                tmp_cut = cv2.dilate(tmp_cut.numpy(), kernel=dilatation_kernel, iterations=iterations)
+        
+        if cuts_with_seq:
+            cut[0] = torch.tensor(tmp_cut)
+            faked_cuts.append(cut)
+        else:    
+            faked_cuts.append(torch.tensor(tmp_cut))
+
+    return faked_cuts
 
 
 class CorrectionMRIDataset(Dataset):
@@ -38,126 +202,6 @@ class CorrectionMRIDataset(Dataset):
 
     def __len__(self):
         return len(self.seg_list)
-
-    def _augment(self, cut: torch.Tensor) -> torch.Tensor:
-        """ 
-        Rotates and flips provided cut.
-
-        Args:
-            cut (Tensor): preprocessed cut
-        Returns:
-            tensor: augmented cut
-        """
-
-        rng = np.random.default_rng()
-        pp = rng.uniform(low=0.0, high=1.0)
-
-        if pp > 0.8:
-            angle = rng.uniform(low=-90, high=90)
-            cut = TF.rotate(cut, angle)
-        
-        if pp > 0.7:
-            cut = TF.hflip(cut)
-        
-        if pp > 0.6:
-            cut = TF.vflip(cut)
-        
-        return cut
-
-    def _cut_volume(
-        self,
-        seg: torch.Tensor,
-        cut_size=32,
-        num: int = np.inf,
-        random=False,
-        augment=False,
-    ) -> list[torch.Tensor]:
-        """
-        Generated cuts from the givine segmentation.
-
-        Args:
-            seg (Tensor): stacked tensor of both the segmentation mask and generated clicks
-            cut_size (int): size of the generated cuts
-            num (int): number of cuts to generate
-            random (bool): whether to randomize the cuts or create them in order
-        Returns:
-            list of tensors: list of generated cuts in shape (cut_size, cut_size)
-        """
-
-        cut_size = cut_size // 2  # needed only as a distance from the center
-
-        # Get coordinates of the generated points
-        click_coords = torch.nonzero(seg[1])
-
-        # Randomize cuts
-        if random:
-            click_coords = click_coords[torch.randperm(len(click_coords))]
-
-        cuts = []
-        k = num if len(click_coords) > num else len(click_coords)
-        for click_idx in range(0, k):
-            coords = click_coords[click_idx]
-
-            # Cut the volume based on the specified cut size
-            cut = torch.clone(seg[0][coords[0]])
-            cut = cut[
-                coords[1] - cut_size : coords[1] + cut_size,
-                coords[2] - cut_size : coords[2] + cut_size,
-            ].unsqueeze(0)
-
-            if augment:
-                cut = self._augment(cut)
-
-            cuts.append(cut)
-
-        return cuts
-
-    def _simulate_errors(self, cuts: list[torch.Tensor], hide_unchanged=False, seed: int | None =None) -> list[torch.Tensor]:
-        """
-        Simulate errors for the generated cuts and return 'erroneous' cuts.
-        
-        Args:
-            cuts (list of tensors): list of generated cuts
-        Returns:
-            list of tensors: list of simulated erroneous cuts
-        """
-
-        # cuts, _ = cut_volume(label, cut_size=cut_size, num=num)
-        erosion_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(5, 5))
-        dilatation_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(7, 7))
-
-        faked_cuts = []
-        if seed is not None:
-            rng = np.random.default_rng(seed=seed)
-        else:
-            rng = np.random.default_rng()
-
-        # Iterate over generated cuts and either erode or dilate the segmentation
-        for cut in cuts:
-            pp = rng.uniform(low=0.0, high=1.0)
-
-            # "hide" unchanged cuts
-            if hide_unchanged and pp > 0.9:
-                faked_cuts.append(cut)
-                continue
-
-            # use only 1 iterations for smaller tumours
-            if len(cut[cut > 0]) < 250:
-                iterations = 1
-            else:
-                iterations = 2
-            
-            if len(cut[cut > 0]) < 50:
-                # only do dilatation, when the tumours is too small
-                cut = cv2.dilate(cut.numpy(), kernel=dilatation_kernel, iterations=1)
-            else:
-                if 0.5 > pp:
-                    cut = cv2.erode(cut.numpy(), kernel=erosion_kernel, iterations=iterations)
-                else:
-                    cut = cv2.dilate(cut.numpy(), kernel=dilatation_kernel, iterations=iterations)
-            faked_cuts.append(torch.tensor(cut))
-
-        return faked_cuts
 
     def __getitem__(self, idx: int) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
         """
@@ -193,16 +237,17 @@ class CorrectionMRIDataset(Dataset):
             clicks_dst=self.clicks.get("dst") or 4,
             seed=self.seed
         )
-        seg = torch.stack((seg, clicks))
+        # seg = torch.stack((seg, clicks))
 
-        cuts = self._cut_volume(
-            seg,
+        cuts = _cut_volumes(
+            seg=seg,
+            clicks=clicks,
             cut_size=self.cuts_config["size"],
             num=self.cuts_config["num"],
             random=self.random,
             augment=self.augment,
         )
-        faked_cuts = self._simulate_errors(cuts, self.include_unchanged, self.seed)
+        faked_cuts = _simulate_errors(copy.deepcopy(cuts), self.include_unchanged, self.seed)
 
         return faked_cuts, cuts
 
@@ -251,140 +296,6 @@ class CorrectionMRIDatasetSequences(Dataset):
 
         return volume
 
-    def _augment(self, cut: torch.Tensor) -> torch.Tensor:
-        """ 
-        Rotates and flips provided cut.
-
-        Args:
-            cut (Tensor): preprocessed cut
-        Returns:
-            tensor: augmented cut
-        """
-
-        rng = np.random.default_rng()
-        pp = rng.uniform(low=0.0, high=1.0)
-
-        if pp > 0.8:
-            angle = rng.uniform(low=-90, high=90)
-            cut = TF.rotate(cut, angle)
-        
-        if pp > 0.7:
-            cut = TF.hflip(cut)
-        
-        if pp > 0.6:
-            cut = TF.vflip(cut)
-        
-        return cut
-
-    def _cut_volume(self, volume: torch.Tensor, coords: list[int], cut_size: int) -> torch.Tensor:
-        """ """
-
-        cut = torch.clone(volume[coords[0]])
-        cut = cut[
-            coords[1] - cut_size : coords[1] + cut_size,
-            coords[2] - cut_size : coords[2] + cut_size,
-        ]
-
-        return cut
-
-    def _cut_volumes(
-        self,
-        seg: torch.Tensor,
-        t1: torch.Tensor,
-        t2: torch.Tensor,
-        clicks: torch.Tensor,
-        cut_size=32,
-        num: int = np.inf,
-        random=False,
-        augment=False,
-    ) -> list[torch.Tensor]:
-        """
-        Generated cuts from the givine segmentation.
-
-        Args:
-            seg (Tensor): stacked tensor of both the segmentation mask and generated clicks
-            cut_size (int): size of the generated cuts
-            num (int): number of cuts to generate
-            random (bool): whether to randomize the cuts or create them in order
-        Returns:
-            list of tensors: list of generated cuts in shape (cut_size, cut_size)
-        """
-
-        cut_size = cut_size // 2  # needed only as a distance from the center
-
-        # Get coordinates of the generated points
-        click_coords = torch.nonzero(clicks)
-
-        # Randomize cuts
-        if random:
-            click_coords = click_coords[torch.randperm(len(click_coords))]
-
-        cuts = []
-        k = num if len(click_coords) > num else len(click_coords)
-        for click_idx in range(0, k):
-            coords = click_coords[click_idx]
-
-            # Cut the volume based on the specified cut size
-            # TODO: try to do all at once
-            seg_cut = self._cut_volume(seg, coords, cut_size)
-            t1_cut = self._cut_volume(t1, coords, cut_size)
-            t2_cut = self._cut_volume(t2, coords, cut_size)
-            cut = torch.stack((seg_cut, t1_cut, t2_cut))
-            
-            if augment:
-                cut = self._augment(cut)
-
-            cuts.append(cut)
-
-        return cuts
-
-    def _simulate_errors(self, cuts: list[torch.Tensor], hide_unchanged=False, seed: int | None =None) -> list[torch.Tensor]:
-        """
-        Simulate errors for the generated cuts and return 'erroneous' cuts.
-        
-        Args:
-            cuts (list of tensors): list of generated cuts
-        Returns:
-            list of tensors: list of simulated erroneous cuts
-        """
-
-        # cuts, _ = cut_volume(label, cut_size=cut_size, num=num)
-        erosion_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(5, 5))
-        dilatation_kernel = cv2.getStructuringElement(shape=cv2.MORPH_ELLIPSE, ksize=(7, 7))
-
-        faked_cuts = []
-        if seed is not None:
-            rng = np.random.default_rng(seed=seed)
-        else:
-            rng = np.random.default_rng()
-
-        # Iterate over generated cuts and either erode or dilate the segmentation
-        for cut in cuts:
-            pp = rng.uniform(low=0.0, high=1.0)
-
-            # "hide" unchanged cuts
-            if hide_unchanged and pp > 0.9:
-                faked_cuts.append(cut)
-                continue
-
-            # use only 1 iterations for smaller tumours
-            if len(cut[0][cut[0] > 0]) < 250:
-                iterations = 1
-            else:
-                iterations = 2
-            
-            if len(cut[0][cut[0] > 0]) < 50:
-                # only do dilatation, when the tumours is too small
-                cut[0] = torch.tensor(cv2.dilate(cut[0].numpy(), kernel=dilatation_kernel, iterations=1))
-            else:
-                if 0.5 > pp:
-                    cut[0] = torch.tensor(cv2.erode(cut[0].numpy(), kernel=erosion_kernel, iterations=iterations))
-                else:
-                    cut[0] = torch.tensor(cv2.dilate(cut[0].numpy(), kernel=dilatation_kernel, iterations=iterations))
-            faked_cuts.append(cut)
-
-        return faked_cuts
-
     def __getitem__(self, idx: int) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
         """
         Load the segmentation mask and run the whole preprocessing pipeline.
@@ -429,7 +340,7 @@ class CorrectionMRIDatasetSequences(Dataset):
         )
         # seg = torch.stack((seg, clicks))
 
-        cuts = self._cut_volumes(
+        cuts = _cut_volumes(
             seg=seg,
             t1=t1,
             t2=t2,
@@ -439,7 +350,9 @@ class CorrectionMRIDatasetSequences(Dataset):
             random=self.random,
             augment=self.augment,
         )
-        faked_cuts = self._simulate_errors(copy.deepcopy(cuts), self.include_unchanged, self.seed)
+        faked_cuts = _simulate_errors(
+            copy.deepcopy(cuts), self.include_unchanged, self.seed, cuts_with_seq=True
+        )
 
         return faked_cuts, cuts
 
@@ -518,8 +431,8 @@ if __name__ == "__main__":
     # print(len(cuts))
     print(cuts[0].shape)
 
-    dataloader = CorrectionDataLoader(data, batch_size=4)
-    total = len(dataloader)
-    for i, (x, y) in enumerate(dataloader):
-        print(f"{i+1}/{total}, {x.shape}, {y.shape}")
-    print(len(dataloader))
+    # dataloader = CorrectionDataLoader(data, batch_size=4)
+    # total = len(dataloader)
+    # for i, (x, y) in enumerate(dataloader):
+    #     print(f"{i+1}/{total}, {x.shape}, {y.shape}")
+    # print(len(dataloader))

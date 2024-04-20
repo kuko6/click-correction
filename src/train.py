@@ -2,7 +2,7 @@ import argparse
 import os
 import glob
 import wandb
-import json
+# import json
 
 from sklearn.model_selection import train_test_split
 import numpy as np
@@ -12,13 +12,13 @@ from torchinfo import summary
 
 from model.segmentation import Unet
 from data.data_generator import MRIDataset
-from utils import EarlyStopper, preview
+from utils import EarlyStopper, make_output_dirs, preview, record_used_files, save_history
 from losses.dice import dice_coefficient, DiceLoss, DiceBCELoss
 from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss
 from losses.clicks import DistanceLoss, DistanceLoss2
 from options import TrainOptions
 
-opt = TrainOptions(use_wand=False)
+opt = TrainOptions()
 config = opt.config
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -42,45 +42,29 @@ def prepare_data(data_dir: str) -> tuple[DataLoader, DataLoader]:
     # if config['clicks']['use']:
     #     preview_clicks(t1_list, t2_list, seg_list, config['clicks'])
 
-    if config["training"] == "base":
-        train_data = MRIDataset(
-            t1_train, t2_train, seg_train, config["img_dims"], clicks=config["clicks"]
-        )
-        val_data = MRIDataset(
-            t1_val, t2_val, seg_val, config["img_dims"], clicks=config["clicks"]
-        )
-    elif config["training"] == "clicks":
-        train_data = MRIDataset(
-            t1_train[config["train_size"]:],
-            t2_train[config["train_size"]:],
-            seg_train[config["train_size"]:],
-            config["img_dims"],
-            clicks=config["clicks"],
-        )
-        val_data = MRIDataset(
-            t1_val[config["val_size"]:],
-            t2_val[config["val_size"]:],
-            seg_val[config["val_size"]:],
-            config["img_dims"],
-            clicks=config["clicks"],
-        )
-        # train_data = MRIDataset(t1_train, t2_train, seg_train, config['img_dims'], clicks=config['clicks'])
-        # val_data = MRIDataset(t1_val, t2_val, seg_val, config['img_dims'])
-    elif config["training"] == "clicks-pretraining":
-        train_data = MRIDataset(
-            t1_train[:config["train_size"]],
-            t2_train[:config["train_size"]],
-            seg_train[:config["train_size"]],
-            config["img_dims"],
-            clicks=False,
-        )
-        val_data = MRIDataset(
-            t1_val[:config["val_size"]],
-            t2_val[:config["val_size"]],
-            seg_val[:config["val_size"]],
-            config["img_dims"],
-        )
+    if config["training"] == "clicks":
+        t1_train = t1_train[config["train_size"]:]
+        t2_train = t2_train[config["train_size"]:]
+        seg_train = seg_train[config["train_size"]:]
 
+        t1_val = t1_val[config["val_size"]:]
+        t2_val = t2_val[config["val_size"]:]
+        seg_val = seg_val[config["val_size"]:]
+    elif config["training"] == "clicks-pretraining":
+        t1_train = t1_train[:config["train_size"]]
+        t2_train = t2_train[:config["train_size"]]
+        seg_train = seg_train[:config["train_size"]]
+
+        t1_val = t1_val[:config["val_size"]]
+        t2_val = t2_val[:config["val_size"]]
+        seg_val = seg_val[:config["val_size"]]
+        
+    train_data = MRIDataset(
+        t1_train, t2_train, seg_train, config["img_dims"], clicks=config["clicks"]
+    )
+    val_data = MRIDataset(
+        t1_val, t2_val, seg_val, config["img_dims"], clicks=config["clicks"]
+    )
     print(len(train_data), len(val_data))
     # print(len(t1_train), len(t2_train), len(seg_train))
     # print(len(t1_val), len(t2_val), len(seg_val))
@@ -88,19 +72,11 @@ def prepare_data(data_dir: str) -> tuple[DataLoader, DataLoader]:
     train_dataloader = DataLoader(train_data, batch_size=config["batch_size"], shuffle=True)
     val_dataloader = DataLoader(val_data, batch_size=config["batch_size"], shuffle=False)
 
-    # TODO: format the output
-    np.savetxt(
-        "outputs/training_files.csv",
-        [("t1", "t2", "seg")] + list(zip(t1_train, t2_train, seg_train)),
-        delimiter=", ",
-        fmt="% s",
-    )
-
-    np.savetxt(
-        "outputs/validation_files.csv",
-        [("t1", "t2", "seg")] + list(zip(t1_val, t2_val, seg_val)),
-        delimiter=", ",
-        fmt="% s",
+    record_used_files(
+        path="outputs", 
+        labels=["t1", "t2", "seg"], 
+        train_files=list(zip(t1_train, t2_train, seg_train)),
+        val_files=list(zip(t1_val, t2_val, seg_val))
     )
 
     return train_dataloader, val_dataloader
@@ -217,10 +193,7 @@ def train(
         val_history["loss"].append(val_loss)
         val_history["dice"].append(val_dice)
 
-        with open("outputs/train_history.json", "w") as f:
-            json.dump(train_history, f)
-        with open("outputs/val_history.json", "w") as f:
-            json.dump(val_history, f)
+        save_history(f"outputs/{opt.name}", train_history, val_history)
 
         # Save checkpoint
         model_checkpoint = {
@@ -229,14 +202,14 @@ def train(
             "optimizer_state": optimizer.state_dict(),
         }
 
-        torch.save(model_checkpoint, "outputs/checkpoint.pt")
+        torch.save(model_checkpoint, f"outputs/{opt.name}/checkpoint.pt")
 
         # Save best checkpoint
         if best["dice"] < val_dice:
             print("-------------------------------")
             print(f'new best!!! (loss: {best["loss"]:>5f} -> {val_loss:>5f}, dice: {best["dice"]:>5f} -> {val_dice:>5f})')
 
-            torch.save(model_checkpoint, "outputs/best.pt")
+            torch.save(model_checkpoint, f"outputs/{opt.name}/best.pt")
 
             best["dice"] = val_dice
             best["loss"] = val_loss
@@ -274,7 +247,7 @@ def train(
 
     if opt.use_wandb:
         artifact = wandb.Artifact("best_model", type="model", metadata={"val_dice": val_dice})
-        artifact.add_file("outputs/best.pt")
+        artifact.add_file(f"outputs/{opt.name}/best.pt")
         wandb.run.log_artifact(artifact)
         wandb.finish()
 
@@ -284,7 +257,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-path", type=str, help="path to data")
     parser.add_argument("--model-path", type=str, help="path to pretrained model")
-    parser.add_argument("--wandb", type=str, help="wandb id")
+    parser.add_argument("--use-wandb", type=str, help="whether to use wandb")
+    parser.add_argument("--wandb-key", type=str, help="wandb id")
+    parser.add_argument("--name", type=str, help="name of the experiment")
 
     args = parser.parse_args()
     # print(args.wandb)
@@ -293,18 +268,29 @@ def main():
         print("You need to specify datapath!!!! >:(")
         return
 
-    wandb_key = args.wandb
-    if opt.use_wandb and wandb_key:
-        wandb.login(key=wandb_key)
-        wandb.init(project="DP", entity="kuko", reinit=True, config=config)
+    # wandb_key = args.wandb
+    global opt
+    if args.use_wandb is not None or args.wandb_key is not None:
+        opt.use_wandb = True
+
+    if args.name is not None:
+        opt.name = args.name
+
+    if opt.use_wandb:
+        wandb.login(key=args.wandb_key)
+        wandb.init(
+            project="DP",
+            entity="kuko",
+            reinit=True,
+            name=opt.name,
+            config=config,
+            tags=opt.tags,
+        )
 
     data_dir = args.data_path
     print(os.listdir(data_dir))
 
-    if not os.path.isdir("outputs"):
-        os.mkdir("outputs")
-    if not os.path.isdir("outputs/images"):
-        os.mkdir("outputs/images")
+    make_output_dirs(["outputs", f"outputs/{opt.name}", "outputs/images"])
 
     # Prepare Datasets
     train_dataloader, val_dataloader = prepare_data(data_dir)
@@ -314,16 +300,12 @@ def main():
         in_channels=config["img_channels"],
         out_channels=config["num_classes"],
         blocks=config["conv_blocks"],
-    ).to(device)
+    )
 
     # writes model architecture to a file (just for experiment logging)
-    with open("outputs/architecture.txt", "w") as f:
+    with open(f"outputs/{opt.name}/architecture.txt", "w") as f:
         model_summary = summary(
-            Unet(
-                in_channels=config["img_channels"],
-                out_channels=config["num_classes"],
-                blocks=config["conv_blocks"],
-            ),
+            model,
             input_size=(
                 config["batch_size"],
                 config["img_channels"],
@@ -333,9 +315,11 @@ def main():
         )
         f.write(str(model_summary))
 
+    model.to(device)
+    
     # Initialize optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.1)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.5)
 
     # Load pretrained model
     if args.model_path and config["training"] == "clicks":

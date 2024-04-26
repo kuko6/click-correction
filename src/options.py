@@ -41,16 +41,15 @@ class TrainCorrectionOptions:
 
     def __init__(self, use_wand=False, name="") -> None:
         self.use_wandb = use_wand
-        self.name = name,
+        self.name = name
         self.tags = ["correction"]
         self.config = {
             "lr": 1e-3,
-            "img_channels": 1,
+            "img_channels": 3,
             "num_classes": 1,
             "conv_blocks": 3,
-            "use_seq": False,
-            "tags": ["correction"],
-            "epochs": 100,
+            "use_seq": True,
+            "epochs": 50,
             "batch_size": 4,
             "loss": "correction",
             "optimizer": "Adam",
@@ -62,10 +61,42 @@ class TrainCorrectionOptions:
             "clicks": {"num": 5, "dst": 10},
             "cuts": {
                 "num": np.inf,  # np.inf
-                "size": 32,
+                "size": 40,
             },
-            "random": False,
-            "include_unchanged": True,
+            "random": True,
+            "include_unchanged": False,
             "augment": True,
             "seed": 690,
+        }
+
+class TrainCorrectionSweepOptions:
+    """Configuration used for wandb sweep for training correction models."""
+
+    def __init__(self, use_wand=False, name="") -> None:
+        self.use_wandb = use_wand
+        self.name = name
+        self.tags = ["correction-sweep"]
+        self.config = {
+            "lr": { "values": [1e-3] },
+            "img_channels": { "values": [3] },
+            "num_classes": { "values": [1] },
+            "conv_blocks": { "values": [3] },
+            "use_seq": { "values": [True] },
+            "epochs": { "values": [40] },
+            "batch_size": { "values": [4] },
+            "loss": { "values": ["correction", "dice"] },
+            "optimizer": { "values": ["Adam"] },
+            "scheduler": { "values": [True] },
+            "early_stopper": { "values": [False] },
+            "img_dims": { "values": [(256, 256)] },
+            # "train_size": { "values": [32, 64, 80] },
+            # "val_size": { "values": [8, 16, 32] },
+            "train_size": { "values": [64] },
+            "val_size": { "values": [16] },
+            "clicks": { "values": [{"num": 5, "dst": 10}] },
+            "cuts": { "values": [{"num": np.inf, "size": 32}, {"num": np.inf, "size": 40}, {"num": np.inf, "size": 64}] },
+            "random": { "values": [False] },
+            "include_unchanged": { "values": [True] },
+            "augment": { "values": [True] },
+            "seed": { "values": [690] },
         }

@@ -117,7 +117,7 @@ def preview_cuts(pred: torch.Tensor, x: torch.Tensor, y: torch.Tensor, dice: flo
     res = cols if cols > rows else rows
 
     # Plot them
-    fig, axs = plt.subplots(rows, cols, figsize=(res * 2, res * 2))
+    fig, axs = plt.subplots(rows, cols, figsize=(res*2, res*2))
     axs = axs.flatten()
     j = 0
 
@@ -149,6 +149,45 @@ def preview_cuts(pred: torch.Tensor, x: torch.Tensor, y: torch.Tensor, dice: flo
 
     fig.savefig(output_path)
     plt.close(fig)
+
+
+# def plot_cuts_with_seq(cuts: list[torch.Tensor], output_path: str, plot_click=True, cmap='magma'):
+#     """ """
+    
+#     rows = 4
+#     cols = 3
+#     res = cols if cols > rows else rows
+#     # print(rows)
+    
+#     # Plot them
+#     fig, axs = plt.subplots(rows, cols, figsize=(res*2, res*2))
+#     axs = axs.flatten()
+#     j = 0
+    
+#     for i, cut in enumerate(cuts):
+#         if j >= len(axs): 
+#             break
+
+#         tmp_cut = torch.clone(cut[0])
+#         if plot_click:
+#             tmp_cut[cut[0].shape[0]//2, cut[0].shape[0]//2] = 2
+        
+#         axs[j].imshow(cut[1], cmap='gray')
+#         axs[j].axis('off')
+#         axs[j].set_title(f't1 cut {i}', fontsize=9)
+#         axs[j+1].imshow(cut[2], cmap='gray')
+#         axs[j+1].axis('off')
+#         axs[j+1].set_title(f't2 cut {i}', fontsize=9)
+#         axs[j+2].imshow(tmp_cut, cmap=cmap)
+#         axs[j+2].axis('off')
+#         axs[j+2].set_title(f'seg cut {i}', fontsize=9)
+#         j += 3
+
+#     fig.suptitle(f"Dice: {dice}", fontsize=10)
+#     plt.subplots_adjust(top=0.9)
+
+#     fig.savefig(output_path)
+#     plt.close(fig)
 
 
 def plot_tumour(mask: torch.Tensor):

@@ -12,7 +12,7 @@ class TrainOptions:
             "lr": 1e-3,
             "img_channels": 2,
             "num_classes": 1,
-            "conv_blocks": 3,  # 3 if device == 'cpu' else 4
+            "conv_blocks": 4,  # 3 if device == 'cpu' else 4
             "epochs": 50,
             "batch_size": 2,
             "loss": "focaltversky",
@@ -20,10 +20,10 @@ class TrainOptions:
             "augment": False,
             "scheduler": True,
             "early_stopper": False,
-            "img_dims": (40, 256, 256), 
+            "img_dims": (48, 256, 256), 
             "training": "clicks-pretraining",  # base, clicks-pretraining, clicks
-            "train_size": 32,
-            "val_size": 8,
+            "train_size": 64,
+            "val_size": 16,
             "clicks": {
                 "use": False,
                 "gen_fg": False,
@@ -56,8 +56,8 @@ class TrainCorrectionOptions:
             "scheduler": True,
             "early_stopper": False,
             "img_dims": (256, 256),
-            "train_size": 64,
-            "val_size": 16,
+            "train_size": None,
+            "val_size": None,
             "clicks": {"num": 5, "dst": 10},
             "cuts": {
                 "num": np.inf,  # np.inf

@@ -134,6 +134,6 @@ class Unet(nn.Module):
 
 
 if __name__ == "__main__":
-    summary(Unet(in_channels=2, out_channels=1), input_size=(2, 2, 40, 80, 80))
+    summary(Unet(in_channels=2, out_channels=1, blocks=4), input_size=(1, 2, 48, 256, 256))
     # print(Unet()._modules)
     # summary(Unet(block_num=4), input_size=(2, 2, 64, 128, 128))

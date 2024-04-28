@@ -107,7 +107,7 @@ def val(dataloader: DataLoader, model: Unet, loss_fn: torch.nn.Module, epoch: in
 
             if i == 0:
                 # preview(y_pred[0], y[0], dice_coefficient(y_pred, y), epoch)
-                preview(y_pred[0], y[0], dice.item(), epoch)
+                preview(y_pred[0], y[0], dice.item(), output_path=f"outputs/images/{epoch}_preview.png")
 
     avg_loss /= len(dataloader)
     avg_dice /= len(dataloader)

@@ -56,12 +56,14 @@ class TrainCorrectionOptions:
             "scheduler": True,
             "early_stopper": False,
             "img_dims": (256, 256),
-            "train_size": None,
-            "val_size": None,
+            "train_size": 128,
+            "val_size": 32,
             "clicks": {"num": 5, "dst": 10},
             "cuts": {
                 "num": np.inf,  # np.inf
                 "size": 40,
+                "volumetric": True,
+                "cut_depth": 8
             },
             "random": True,
             "include_unchanged": False,

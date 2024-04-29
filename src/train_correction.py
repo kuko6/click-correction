@@ -47,7 +47,8 @@ def prepare_data(data_dir: str) -> tuple[CorrectionDataLoader, CorrectionDataLoa
             random=config["random"],
             include_unchanged=config["include_unchanged"],
             augment=config["augment"],
-            seed=config["seed"]
+            seed=config["seed"],
+            volumetric_cuts=config["cuts"]["volumetric"]
         )
         val_data = CorrectionMRIDatasetSequences(
             t1_val[:config["val_size"]],
@@ -59,7 +60,8 @@ def prepare_data(data_dir: str) -> tuple[CorrectionDataLoader, CorrectionDataLoa
             random=False,
             include_unchanged=config["include_unchanged"],
             augment=False,
-            seed=config["seed"]
+            seed=config["seed"],
+            volumetric_cuts=config["cuts"]["volumetric"]
         )
     else:
         print("Using dataset without sequences")
@@ -131,7 +133,7 @@ def val(dataloader: CorrectionDataLoader, model: CorrectionUnet, loss_fn: torch.
 
             print(f"validation step: {i+1}/{dataloader_size}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
 
-            if i==0:
+            if i==0 and not config["cuts"]["volumetric"]:
                 preview_cuts(y_pred, x, y, dice.item(), output_path=f"outputs/images/{epoch}_preview.png")
 
     avg_loss /= dataloader_size
@@ -325,17 +327,17 @@ def main():
         in_channels=config["img_channels"],
         out_channels=config["num_classes"],
         blocks=config["conv_blocks"],
+        volumetric=config["cuts"]["volumetric"]
     )
 
     # writes model architecture to a file (just for experiment logging)
     with open(f"outputs/{opt.name}/architecture.txt", "w") as f:
+        sample_input = [config["batch_size"], config["img_channels"], config["cuts"]["size"], config["cuts"]["size"]]
+        if config["cuts"]["volumetric"]:
+            sample_input.insert(2, config["cuts"]["cut_depth"]*2)
         model_summary = summary(
             model,
-            input_size=(
-                config["batch_size"],
-                config["img_channels"],
-                *config["img_dims"],
-            ),
+            input_size=sample_input,
             verbose=0,
         )
         f.write(str(model_summary))

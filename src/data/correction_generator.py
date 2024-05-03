@@ -9,8 +9,36 @@ import torch
 from torch.utils.data import Dataset
 import torchvision.transforms.functional as TF
 
-# from .utils import generate_clicks
-from utils import generate_clicks
+from .utils import generate_clicks
+# from utils import generate_clicks
+
+
+def _augment(cut: torch.Tensor) -> torch.Tensor:
+    """ 
+    Rotates and flips provided cut.
+
+    Args:
+        cut (Tensor): preprocessed cut
+    Returns:
+        tensor: augmented cut
+    """
+
+    # print(cut.shape)
+
+    rng = np.random.default_rng()
+    pp = rng.uniform(low=0.0, high=1.0)
+
+    if pp > 0.8:
+        angle = rng.uniform(low=-90, high=90)
+        cut = TF.rotate(cut, angle)
+    
+    if pp > 0.7:
+        cut = TF.hflip(cut)
+    
+    if pp > 0.6:
+        cut = TF.vflip(cut)
+    
+    return cut
 
 
 def _cut_volume(volume: torch.Tensor, coords: list[int], cut_size: int) -> torch.Tensor:
@@ -66,7 +94,7 @@ def _3dcut_volume(volume: torch.Tensor, coords: list[int], cut_size: int, cut_de
         coords[1] - cut_size : coords[1] + cut_size,
         coords[2] - cut_size : coords[2] + cut_size,
     ]
-    # print(cut.shape)
+    # print(volume.shape, cut.shape, coords,  coords[0] - cut_depth, coords[0] + cut_depth)
 
     return cut
 
@@ -112,7 +140,7 @@ def _cut_volumes(
 
         # Cut the volume based on the specified cut size
         if cut_depth:
-            if coords[0] < cut_depth: 
+            if coords[0] < cut_depth or coords[0] + cut_depth > volume.shape[1]: 
                 continue
             cut = cut_fn(volume, coords, cut_size, cut_depth)
         else:
@@ -121,40 +149,14 @@ def _cut_volumes(
         # cut = cut_fn(volume, coords, cut_size).unsqueeze(0)
         
         if augment:
-            if cut_depth:
-                cut = _augment(cut)
-            else:
+            if len(cut.shape) == 2:
                 cut = _augment(cut.unsqueeze(0))
+            else:
+                cut = _augment(cut)
 
         cuts.append(cut)
 
     return cuts
-
-
-def _augment(cut: torch.Tensor) -> torch.Tensor:
-    """ 
-    Rotates and flips provided cut.
-
-    Args:
-        cut (Tensor): preprocessed cut
-    Returns:
-        tensor: augmented cut
-    """
-
-    rng = np.random.default_rng()
-    pp = rng.uniform(low=0.0, high=1.0)
-
-    if pp > 0.8:
-        angle = rng.uniform(low=-90, high=90)
-        cut = TF.rotate(cut, angle)
-    
-    if pp > 0.7:
-        cut = TF.hflip(cut)
-    
-    if pp > 0.6:
-        cut = TF.vflip(cut)
-    
-    return cut
 
 
 def _simulate_3derrors(cuts: list[torch.Tensor], hide_unchanged=False, seed: int | None =None, cuts_with_seq=False) -> list[torch.Tensor]:
@@ -210,7 +212,7 @@ def _simulate_3derrors(cuts: list[torch.Tensor], hide_unchanged=False, seed: int
                     tmp_cut = cv2.dilate(tmp_cut.numpy(), kernel=dilatation_kernel, iterations=iterations)
         
             cut[0,slice_idx] = torch.tensor(tmp_cut)
-            faked_cuts.append(cut)
+        faked_cuts.append(cut)
 
     return faked_cuts
 
@@ -497,23 +499,23 @@ if __name__ == "__main__":
     t2_list = glob.glob(os.path.join(data_path, "VS-*-*/vs_*/*_t2_*"))
     seg_list = glob.glob(os.path.join(data_path, "VS-*-*/vs_*/*_seg_*"))
 
-    # data = CorrectionMRIDataset(
-    #     # ["data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz", 
-    #     #  "data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz"],
-    #     seg_list[:4],
-    #     (256, 256),
-    #     clicks={"num": 3, "dst": 10},
-    #     cuts={
-    #         "num": 32,
-    #         "size": 32,
-    #     },
-    #     seed=690,
-    #     random=False,
-    #     include_unchanged=True,
-    #     augment=True
-    # )
-    # faked_cuts, cuts = data[0]
-    # print(cuts[0].shape)
+    data = CorrectionMRIDataset(
+        # ["data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz", 
+        #  "data/all/VS-31-61/vs_gk_56/vs_gk_seg_refT2.nii.gz"],
+        seg_list[:4],
+        (256, 256),
+        clicks={"num": 3, "dst": 10},
+        cuts={
+            "num": 32,
+            "size": 32,
+        },
+        seed=690,
+        random=False,
+        include_unchanged=True,
+        augment=True
+    )
+    faked_cuts, cuts = data[0]
+    print(cuts[0].shape)
 
     # data = CorrectionMRIDatasetSequences(
     #     t1_list[:4],
@@ -532,32 +534,48 @@ if __name__ == "__main__":
     # )
     # faked_cuts, cuts = data[0]
     # print(cuts[0].shape)
-
+    # print(len(data[0]), len(data[0][0]), len(data[0][1]), data[0][0][0].shape)
+    
     data = CorrectionMRIDatasetSequences(
         t1_list[:4],
         t2_list[:4],
         seg_list[:4],
+        # [t1_list[85]],
+        # [t2_list[85]],
+        # [seg_list[85]],
         (256, 256),
-        clicks={"num": 3, "dst": 10},
+        clicks={"num": 5, "dst": 10},
         cuts={
-            "num": 32,
-            "size": 32,
+            "num": np.inf,
+            "size": 40,
             "cut_depth": 8
         },
         seed=690,
         random=False,
-        include_unchanged=True,
+        include_unchanged=False,
         augment=True,
         volumetric_cuts=True
     )
     faked_cuts, cuts = data[0]
-    # print(cuts[0].shape)
-    # print(len(data[0][0]))
+    print(cuts[0].shape)
+    print(len(data[0]), len(data[0][0]), len(data[0][1]), data[0][0][0].shape)
 
-    dataloader = CorrectionDataLoader(data, batch_size=4)
-    total = len(dataloader)
-    for i, (x, y) in enumerate(dataloader):
-        print(f"{i+1}/{total}, {x.shape}, {y.shape}")
-        # print(x.shape, y.shape)
-        break
-    print(len(dataloader))
+    # default_shape = torch.Size([3, 16, 40, 40])
+    # i, j = 0, 0
+    # for x, y in data:
+    #     for xx, yy in zip(x, y):
+    #         # print(f'i:{i}, j:{j}, xx:{xx.shape}, yy:{yy.shape}')
+    #         if xx.shape != default_shape or yy.shape != default_shape:
+    #             print(f'i:{i}, j:{j}, xx:{xx.shape}, yy:{yy.shape}')
+    #         j += 1
+    #     i += 1
+    #     j = 0
+
+
+    # dataloader = CorrectionDataLoader(data, batch_size=4)
+    # total = len(dataloader)
+    # print(total)
+    # for i, (x, y) in enumerate(dataloader):
+    #     print(f"{i+1}/{total}, {x.shape}, {y.shape}")
+    #     # print(x.shape, y.shape)
+    #     # break

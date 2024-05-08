@@ -327,7 +327,8 @@ def main():
         in_channels=config["img_channels"],
         out_channels=config["num_classes"],
         blocks=config["conv_blocks"],
-        volumetric=config["cuts"]["volumetric"]
+        volumetric=config["cuts"]["volumetric"],
+        block_channels=config["block_channels"]
     )
 
     # writes model architecture to a file (just for experiment logging)

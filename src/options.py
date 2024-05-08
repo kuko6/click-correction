@@ -47,7 +47,8 @@ class TrainCorrectionOptions:
             "lr": 1e-3,
             "img_channels": 3,
             "num_classes": 1,
-            "conv_blocks": 3,
+            "conv_blocks": 4,
+            "block_channels": [12, 24, 48, 96],
             "use_seq": True,
             "epochs": 50,
             "batch_size": 4,
@@ -61,9 +62,9 @@ class TrainCorrectionOptions:
             "clicks": {"num": 5, "dst": 10},
             "cuts": {
                 "num": np.inf,  # np.inf
-                "size": 40,
-                "volumetric": True,
-                "cut_depth": 8
+                "size": 48,
+                "volumetric": False,
+                "cut_depth": None
             },
             "random": True,
             "include_unchanged": False,

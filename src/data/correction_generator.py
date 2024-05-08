@@ -10,7 +10,7 @@ from torch.utils.data import Dataset
 import torchvision.transforms.functional as TF
 
 from .utils import generate_clicks
-# from utils import generate_clicks
+# from utils import generate_clicks
 
 
 def _augment(cut: torch.Tensor) -> torch.Tensor:
@@ -148,11 +148,11 @@ def _cut_volumes(
         # cut = cut_fn(volume, coords, cut_size).unsqueeze(0)
         # cut = cut_fn(volume, coords, cut_size).unsqueeze(0)
         
+        if len(cut.shape) == 2:
+            cut = cut.unsqueeze(0)
+
         if augment:
-            if len(cut.shape) == 2:
-                cut = _augment(cut.unsqueeze(0))
-            else:
-                cut = _augment(cut)
+            cut = _augment(cut)
 
         cuts.append(cut)
 

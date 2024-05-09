@@ -35,21 +35,20 @@ def _get_weight_map(dims: tuple[int], min_thresh=9, max_thresh=20, inverted=Fals
 
 def weighted_coefficient(y_pred: torch.Tensor, y_true: torch.Tensor, weight_map: torch.Tensor, eps=1e-6) -> torch.Tensor:
     """
-    Dice coefficient weighted with the weight map.
-    
-    Args:
-        y_pred (Tensor): prediction
-        y_true (Tensor): ground truth
-        weight_map (Tensor): weight map of the same shape as `y`
-        eps (float): constant used to avoid division by zero
-    Returns:
-        Tensor: calculated dice coefficient 
-    """
+    Calculates the weighted coefficient for a batch of predicted and true tensors.
 
+    Args:
+        y_pred (Tensor): The predicted tensor
+        y_true (Tensor): The true tensor
+        weight_map (Tensor): The weight map tensor
+        eps (float, optional): A small value to avoid division by zero. Defaults to 1e-6
+    Returns:
+        Tensor: The weighted coefficient
+    """
+    
     # sum for each volume in batch
     intersection = torch.sum(y_pred * y_true * weight_map, dim=[2, 3])
     union = torch.sum(weight_map * (y_pred + y_true), dim=[2, 3])
-    # coeff = (intersection + eps) / (union + eps)
     coeff = (2.0 * intersection + eps) / (union + eps)
     
     # mean of the whole batch

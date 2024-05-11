@@ -48,8 +48,9 @@ class TrainCorrectionOptions:
             "img_channels": 3,
             "num_classes": 1,
             "conv_blocks": 4,
-            "block_channels": [12, 24, 48, 96],
+            "block_channels": [32, 64, 128, 256],
             "use_seq": True,
+            "use_attention": True,
             "epochs": 50,
             "batch_size": 4,
             "loss": "correction",
@@ -57,8 +58,8 @@ class TrainCorrectionOptions:
             "scheduler": True,
             "early_stopper": False,
             "img_dims": (256, 256),
-            "train_size": 128,
-            "val_size": 32,
+            "train_size": None, # 128, None
+            "val_size": None, # 32 ,None
             "clicks": {"num": 5, "dst": 10},
             "cuts": {
                 "num": np.inf,  # np.inf

@@ -328,7 +328,8 @@ def main():
         out_channels=config["num_classes"],
         blocks=config["conv_blocks"],
         volumetric=config["cuts"]["volumetric"],
-        block_channels=config["block_channels"]
+        block_channels=config["block_channels"],
+        use_attention=config["use_attention"]
     )
 
     # writes model architecture to a file (just for experiment logging)

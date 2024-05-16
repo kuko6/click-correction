@@ -9,11 +9,11 @@ import numpy as np
 import torch
 from torchinfo import summary
 
-from model.correction import CorrectionUnet
+from model.correction import CorrectionUnet, MultiModalCorrectionUnet, MultiModal3BlockCorrectionUnet
 from data.correction_generator import CorrectionDataLoader, CorrectionMRIDataset, CorrectionMRIDatasetSequences
 from utils import EarlyStopper, make_output_dirs, preview_cuts, record_used_files, save_history
 from losses.dice import dice_coefficient, DiceLoss
-from losses.correction import CorrectionLoss
+from losses.correction import CorrectionLoss, VolumetricCorrectionLoss
 from options import TrainCorrectionOptions
 
 opt = TrainCorrectionOptions()
@@ -89,7 +89,9 @@ def prepare_data(data_dir: str) -> tuple[CorrectionDataLoader, CorrectionDataLoa
 
     train_dataloader = CorrectionDataLoader(train_data, batch_size=config["batch_size"])
     val_dataloader = CorrectionDataLoader(val_data, batch_size=config["batch_size"])
-    print(f"~{len(train_dataloader)*2}, ~{len(val_dataloader)*2}")
+    train_dataloader.size = len(train_dataloader)
+    val_dataloader.size = len(val_dataloader)
+    print(f"~{train_dataloader.size * config['batch_size']}, ~{val_dataloader.size * config['batch_size']}")
 
     if config["use_seq"]:
         record_used_files(
@@ -114,7 +116,6 @@ def val(dataloader: CorrectionDataLoader, model: CorrectionUnet, loss_fn: torch.
 
     model.eval()
     avg_loss, avg_dice = 0, 0
-    dataloader_size = len(dataloader)
     with torch.no_grad():
         for i, (x, y) in enumerate(dataloader):
             x, y = x.to(device), y.to(device)
@@ -122,7 +123,8 @@ def val(dataloader: CorrectionDataLoader, model: CorrectionUnet, loss_fn: torch.
 
             # Compute loss and dice coefficient
             if config["use_seq"]:
-                y = y[:,0].unsqueeze(1)
+                # y = y[:,0].unsqueeze(1)
+                # y = y[:,0].unsqueeze(1)
                 y = y[:,0].unsqueeze(1)
 
             loss = loss_fn(y_pred, y)
@@ -131,13 +133,13 @@ def val(dataloader: CorrectionDataLoader, model: CorrectionUnet, loss_fn: torch.
             avg_loss += loss.item()
             avg_dice += dice.item()
 
-            print(f"validation step: {i+1}/{dataloader_size}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
+            print(f"validation step: {i+1}/{dataloader.size}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
 
             if i==0 and not config["cuts"]["volumetric"]:
                 preview_cuts(y_pred, x, y, dice.item(), output_path=f"outputs/images/{epoch}_preview.png")
 
-    avg_loss /= dataloader_size
-    avg_dice /= dataloader_size
+    avg_loss /= dataloader.size
+    avg_dice /= dataloader.size
     print()
 
     return (avg_loss, avg_dice)
@@ -148,7 +150,6 @@ def train_one_epoch(dataloader: CorrectionDataLoader, model: CorrectionUnet, los
 
     model.train()
     avg_loss, avg_dice = 0, 0
-    dataloader_size = len(dataloader)
     for i, (x, y) in enumerate(dataloader):
         x, y = x.to(device), y.to(device)
         optimizer.zero_grad()
@@ -159,7 +160,8 @@ def train_one_epoch(dataloader: CorrectionDataLoader, model: CorrectionUnet, los
         # Compute loss and dice coefficient
         if config["use_seq"]:
             y = y[:,0].unsqueeze(1)
-            y = y[:,0].unsqueeze(1)
+            # y = y[:,0]
+            # y = y[:,0]
             
         loss = loss_fn(y_pred, y)
         dice = dice_coefficient(y_pred, y)
@@ -173,10 +175,10 @@ def train_one_epoch(dataloader: CorrectionDataLoader, model: CorrectionUnet, los
         loss.backward()
         optimizer.step()
 
-        print(f"training step: {i+1}/{dataloader_size}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
+        print(f"training step: {i+1}/{dataloader.size}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
 
-    avg_loss /= dataloader_size
-    avg_dice /= dataloader_size
+    avg_loss /= dataloader.size
+    avg_dice /= dataloader.size
     print()
 
     return (avg_loss, avg_dice)
@@ -323,14 +325,37 @@ def main():
     train_dataloader, val_dataloader = prepare_data(data_dir)
 
     # # Initialize model
-    model = CorrectionUnet(
-        in_channels=config["img_channels"],
-        out_channels=config["num_classes"],
-        blocks=config["conv_blocks"],
-        volumetric=config["cuts"]["volumetric"],
-        block_channels=config["block_channels"],
-        use_attention=config["use_attention"]
-    )
+    if config["model"] == "standard":
+        model = CorrectionUnet(
+            in_channels=config["img_channels"],
+            out_channels=config["num_classes"],
+            blocks=config["conv_blocks"],
+            volumetric=config["cuts"]["volumetric"],
+            block_channels=config["block_channels"],
+            use_attention=config["use_attention"],
+            use_dropout=config["use_dropout"]
+        )
+    elif config["model"] == "multimodal":
+        if config["conv_blocks"] == 3:
+            model = MultiModal3BlockCorrectionUnet(
+                in_channels=config["in_channels"],
+                out_channels=config["num_classes"],
+                blocks=config["conv_blocks"],
+                encoders=2,
+                volumetric=config["cuts"]["volumetric"],
+                block_channels=config["block_channels"],
+                use_dropout=config["use_dropout"]
+            )
+        else:
+            model = MultiModalCorrectionUnet(
+                in_channels=config["in_channels"],
+                out_channels=config["num_classes"],
+                blocks=config["conv_blocks"],
+                encoders=2,
+                volumetric=config["cuts"]["volumetric"],
+                block_channels=config["block_channels"],
+                use_dropout=config["use_dropout"]
+            )
 
     # writes model architecture to a file (just for experiment logging)
     with open(f"outputs/{opt.name}/architecture.txt", "w") as f:
@@ -356,15 +381,18 @@ def main():
         "correction": CorrectionLoss(
             dims=(1, config["cuts"]["size"], config["cuts"]["size"]),
             device=device,
-            batch_size=config["batch_size"],
             inverted=False,
         ),
         "invertedCorrection": CorrectionLoss(
             dims=(1, config["cuts"]["size"], config["cuts"]["size"]),
             device=device,
-            batch_size=config["batch_size"],
             inverted=True,
         ),
+        # "volumetricCorrection": VolumetricCorrectionLoss(
+        #     dims=(1, config["cuts"]["cut_depth"]*2, config["cuts"]["size"], config["cuts"]["size"]),
+        #     device=device,
+        #     inverted=True,
+        # )
     }
 
     loss_fn = loss_functions[config["loss"]]

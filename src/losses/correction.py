@@ -3,6 +3,8 @@ from torch import nn
 import scipy
 import numpy as np
 
+from losses.dice import dice_coefficient
+
 # from losses.dice import dice_coefficient
 
 
@@ -20,7 +22,10 @@ def _get_weight_map(dims: tuple[int], min_thresh=9, max_thresh=20, inverted=Fals
     """
     
     tmp = torch.zeros(dims)
-    tmp[:, dims[2] // 2, dims[2] // 2] = 1
+    if len(dims) == 4:
+        tmp[:, :, dims[2] // 2, dims[2] // 2] = 1
+    else:
+        tmp[:, dims[2] // 2, dims[2] // 2] = 1
     dst = scipy.ndimage.distance_transform_edt(1 - tmp[0])
 
     if inverted:
@@ -45,10 +50,13 @@ def weighted_coefficient(y_pred: torch.Tensor, y_true: torch.Tensor, weight_map:
     Returns:
         Tensor: The weighted coefficient
     """
+    # get which dimensions to sum over (2, 3) for 2d, (2, 3, 4) for 3d
+    dims = [i for i in range(2, len(y_true.shape), 1)]
     
-    # sum for each volume in batch
-    intersection = torch.sum(y_pred * y_true * weight_map, dim=[2, 3])
-    union = torch.sum(weight_map * (y_pred + y_true), dim=[2, 3])
+    # sum along the spatial dimensions (width and height) 
+    # computing coefficient for each volume/image in the batch
+    intersection = torch.sum(y_pred * y_true * weight_map, dim=dims)
+    union = torch.sum(weight_map * (y_pred + y_true), dim=dims)
     coeff = (2.0 * intersection + eps) / (union + eps)
     
     # mean of the whole batch
@@ -57,21 +65,41 @@ def weighted_coefficient(y_pred: torch.Tensor, y_true: torch.Tensor, weight_map:
 
 class CorrectionLoss(nn.Module):
     """
-    Loss for training the correction network, consisting of two parts:
-        - one should be pulling it towards the middle
-        - the other should be something like a dice loss, correcting the parts further from the middle
+    Loss for training the correction network.
+        - consists of a weighted dice coefficient which has higher weights in the middle
     """
 
-    def __init__(self, dims: tuple, device: str, batch_size: int, inverted=False):
+    def __init__(self, dims: tuple, device: str, inverted=False):
         super().__init__()
         # self.alpha = alpha
-        # self.probs = probs
         self.weight_map = _get_weight_map(dims, inverted)
         self.weight_map = self.weight_map.to(device)
-        # self.weight_map = torch.stack((self.weight_map, self.weight_map))
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
         # loss = 1 - dice_coefficient(y_pred, y_true)
         loss = 1 - weighted_coefficient(y_pred, y_true, self.weight_map)
+
+        return loss
+
+
+class VolumetricCorrectionLoss(nn.Module):
+    """
+    Loss for training the correction network with volumetric cuts.
+        - consists of a weighted dice coefficient which has higher weights in the middle
+    """
+
+    def __init__(self, dims: tuple, device: str, alpha=0.75,  inverted=False):
+        super().__init__()
+        self.alpha = alpha
+        self.weight_map = _get_weight_map(dims, inverted)
+        self.weight_map = self.weight_map.to(device)
+
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
+        depth = y_true.shape[2]
+        
+        dice_loss = 1 - dice_coefficient(y_pred, y_true)
+        middle_loss = 1 - weighted_coefficient(y_pred[:,:,depth//2].unsqueeze(0), y_true[:,:,depth//2].unsqueeze(0), self.weight_map)
+
+        loss = middle_loss + self.alpha * dice_loss
 
         return loss

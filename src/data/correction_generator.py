@@ -151,8 +151,8 @@ def _cut_volumes(
         if len(cut.shape) == 2:
             cut = cut.unsqueeze(0)
 
-        if augment:
-            cut = _augment(cut)
+        # if augment:
+        #     cut = _augment(cut)
 
         cuts.append(cut)
 
@@ -187,7 +187,7 @@ def _simulate_3derrors(cuts: list[torch.Tensor], hide_unchanged=False, seed: int
         pp = rng.uniform(low=0.0, high=1.0)
 
         # "hide" unchanged cuts
-        if hide_unchanged and pp > 0.9:
+        if hide_unchanged and pp > 0.7:
             faked_cuts.append(cut)
             continue
         
@@ -245,7 +245,7 @@ def _simulate_errors(cuts: list[torch.Tensor], hide_unchanged=False, seed: int |
         pp = rng.uniform(low=0.0, high=1.0)
 
         # "hide" unchanged cuts
-        if hide_unchanged and pp > 0.9:
+        if hide_unchanged and pp > 0.7:
             faked_cuts.append(cut)
             continue
 
@@ -471,11 +471,11 @@ class CorrectionDataLoader:
     def __init__(self, dataset: Dataset, batch_size: int):
         self.dataset = dataset
         self.batch_size = batch_size
+        self.size = 0
 
     def __len__(self):
         data_length = 0
         for data in self.dataset:
-            # print(len(data[0]))
             if len(data[0]) % self.batch_size > 0:
                 data_length += (len(data[0])//self.batch_size + 1)
             else:

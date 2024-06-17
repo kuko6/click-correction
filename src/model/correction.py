@@ -182,13 +182,15 @@ class AttentionBlock(nn.Module):
         
         self.relu = nn.ReLU()
 
-    def forward(self, g, x):
+    def forward(self, g, x, return_attention=False):
         g = self.wg(g) # up
         xl = self.wx(x) # skip
-        
+        print((xl + g).shape, xl.shape, g.shape)
         alpha = self.psi(self.relu(xl + g))
         alpha = self.resampler(alpha)
 
+        if return_attention:
+            return torch.mul(x, alpha), alpha
         return torch.mul(x, alpha)
 
 
@@ -552,7 +554,7 @@ class MultiModal3BlockCorrectionUnet(nn.Module):
         # Output
         self.output = Output(block_channels[0], out_channels, volumetric=volumetric)
 
-    def forward(self, x):
+    def forward(self, x, return_attention=False):
         if self.encoders == 2:
             inputs = [x[:,0].unsqueeze(1), x[:,1:]]
         else:
@@ -575,7 +577,7 @@ class MultiModal3BlockCorrectionUnet(nn.Module):
 
         # Upsampling path
         skip1 = self.att1_3(out, skip1_3)
-        skip2 = self.att2_3(out, skip2_3)
+        skip2= self.att2_3(out, skip2_3)
         skip = torch.cat([skip1, skip2], dim=1)
         out = self.up3(out, skip)
 
@@ -584,13 +586,16 @@ class MultiModal3BlockCorrectionUnet(nn.Module):
         skip = torch.cat([skip1, skip2], dim=1)
         out = self.up2(out, skip)
 
-        skip1 = self.att1_1(out, skip1_1)
-        skip2 = self.att2_1(out, skip2_1)
+        skip1, alpha1 = self.att1_1(out, skip1_1, return_attention=True)
+        skip2, alpha2 = self.att2_1(out, skip2_1, return_attention=True)
         skip = torch.cat([skip1, skip2], dim=1)
         out = self.up1(out, skip)
 
+
         # Output
         out = self.output(out)
+        if return_attention:
+            return out, alpha1, alpha2
         return out
     
 
@@ -664,9 +669,13 @@ class OGCorrectionUnet(nn.Module):
 
 
 if __name__ == "__main__":
-    # model = MultiModalCorrectionUnet(in_channels=[1, 2], encoders=2, out_channels=1, blocks=4)
-    # x = torch.rand(size=(2, 3, 48, 48))
-    # model(x)
+    model = MultiModal3BlockCorrectionUnet(in_channels=[1, 2], encoders=2, out_channels=1)
+    x = torch.rand(size=(2, 3, 48, 48))
+    a, att1, att2 = model(x, return_attention=True)
+    print(a.shape, att1.shape)
+
+    a = model(x, return_attention=False)
+    print(a.shape)
 
     summary(
         MultiModal3BlockCorrectionUnet(in_channels=[1, 2], encoders=2, out_channels=1, blocks=3, volumetric=True, use_dropout=True),
@@ -676,7 +685,7 @@ if __name__ == "__main__":
 
     # summary(
     #     CorrectionUnet(in_channels=1, out_channels=1, blocks=3, use_attention=True, volumetric=False, use_dropout=True, block_channels=[32, 64, 128, 256]),
-    #     input_size=(2, 1, 48, 48),
+    #     input_size=(2, 1, 16, 16),
     #     depth=3
     # )
 

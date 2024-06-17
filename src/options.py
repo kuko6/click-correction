@@ -45,7 +45,7 @@ class TrainCorrectionOptions:
         self.tags = ["correction"]
         self.config = {
             "lr": 1e-3,
-            "model": "standard", # standard, multimodal
+            "model": "multimodal", # standard, multimodal
             "in_channels": [1, 2], # 3
             "img_channels": 3,
             "num_classes": 1,
@@ -56,7 +56,7 @@ class TrainCorrectionOptions:
             "use_dropout": True,
             "epochs": 50,
             "batch_size": 4,
-            "loss": "dice",
+            "loss": "invertedCorrection",
             "optimizer": "Adam",
             "scheduler": True,
             "early_stopper": False,
@@ -96,7 +96,7 @@ class FineTunningCorrectionOptions:
             "use_dropout": True,
             "epochs": 50,
             "batch_size": 4,
-            "loss": "dice",
+            "loss": "invertedCorrection",
             "optimizer": "Adam",
             "scheduler": True,
             "early_stopper": False,

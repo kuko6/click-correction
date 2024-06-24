@@ -95,9 +95,6 @@ class DistanceLoss2(nn.Module):
             # y_threshed = (y_pred > self.preds_threshold).type(torch.float32)
             y_threshed[y_threshed <= self.preds_threshold] = 0
             y_threshed[y_threshed > self.preds_threshold] = 1
-        
-        # print(y_pred.grad_fn)
-        # print(y_threshed.grad_fn)
 
         dst = kornia_dst(y_threshed[:,0,:,:,:])
         inverted_dst = kornia_dst(1 - y_threshed[:,0,:,:,:])
@@ -114,13 +111,6 @@ class DistanceLoss2(nn.Module):
         loss = distance_loss
 
         # loss.requires_grad_()
-    
-        # print(distance_loss.item(), overlap.item())
-        # print(torch.mean(combined[a]))
-        # print(distance_loss.item(), dice_loss.item())
-        # loss = combined[a] / len(a)
-        # print(distance_loss.grad_fn)
-        # print(loss.grad_fn)
 
         return loss
 

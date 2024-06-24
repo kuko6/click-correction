@@ -1,17 +1,11 @@
 import argparse
 import os
 import glob
-# import wandb
-# import json
-
-# from sklearn.model_selection import train_test_split
-# import numpy as np
 import torch
 from torchinfo import summary
 
 from model.segmentation import Unet
 from model.correction import CorrectionUnet, MultiModalCorrectionUnet, MultiModal3BlockCorrectionUnet
-# from data.correction_generator import CorrectionDataLoader, CorrectionMRIDataset, CorrectionMRIDatasetSequences
 from data.data_generator import MRIDataset
 from utils import make_output_dirs
 from losses.dice import dice_coefficient, DiceLoss
@@ -30,11 +24,8 @@ def prepare_cuts(segmentation_model, data, cut_size):
     with torch.no_grad():
         prepared_cuts = []
         for (x, y) in data:
-            # print(x.shape, y.shape)
-            # x, y = x.to(device), y.to(device)
             y_pred = segmentation_model(x.unsqueeze(0).to(device))
             y_pred = (y_pred > 0.6).type(torch.float32)
-            # y_pred = y_pred.squeeze(0)
 
             y_pred = y_pred.cpu()
             new_clicks = simulate_clicks(y, y_pred[0], clicks_num=5, clicks_dst=10, seed=420)
@@ -43,10 +34,8 @@ def prepare_cuts(segmentation_model, data, cut_size):
             )
 
             true_seg_cuts = cut_volume(torch.stack((y[0], new_clicks[0])), cut_size=cut_size)
-            # print(len(seg_cuts), len(t1_cuts), len(t2_cuts), len(true_seg_cuts))
 
             for seg_cut, t1_cut, t2_cut, true_seg_cut in zip(seg_cuts, t1_cuts, t2_cuts, true_seg_cuts):
-                # training_cuts.append(torch.stack((seg_cut.squeeze(0), t1_cut.squeeze(0), t2_cut.squeeze(0))))
                 prepared_cuts.append((
                     torch.stack((seg_cut.squeeze(0), t1_cut.squeeze(0), t2_cut.squeeze(0))),
                     true_seg_cut
@@ -95,14 +84,6 @@ def prepare_data(data_dir: str, segmentation_model):
 
     test_batches = create_batches(testing_cuts, batch_size=config["batch_size"])
     print(f"train size: {len(testing_cuts)}, train batches: {len(test_batches)}")
-
-    # if config["use_seq"]:
-    #     record_used_files(
-    #         path=f"outputs/{opt.name}", 
-    #         labels=["t1", "t2", "seg"], 
-    #         train_files=list(zip(t1_train[:config["train_size"]], t2_train[:config["train_size"]], seg_train[:config["train_size"]])),
-    #         val_files=list(zip(t1_val[:config["val_size"]], t2_val[:config["val_size"]], seg_val[:config["val_size"]]))
-    #     )
 
     return test_batches
 

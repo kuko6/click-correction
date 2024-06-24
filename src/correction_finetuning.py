@@ -30,8 +30,6 @@ def prepare_cuts(segmentation_model, data, cut_size):
     with torch.no_grad():
         prepared_cuts = []
         for (x, y) in data:
-            # print(x.shape, y.shape)
-            # x, y = x.to(device), y.to(device)
             y_pred = segmentation_model(x.unsqueeze(0).to(device))
             y_pred = (y_pred > 0.6).type(torch.float32)
             # y_pred = y_pred.squeeze(0)

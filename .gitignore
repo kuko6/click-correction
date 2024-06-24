@@ -6,8 +6,6 @@ __pycache__/
 
 outputs/
 training_outputs/
-data/
-!src/data/
 
 wandb/
 models/

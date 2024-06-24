@@ -516,25 +516,6 @@ if __name__ == "__main__":
     )
     faked_cuts, cuts = data[0]
     print(cuts[0].shape)
-
-    # data = CorrectionMRIDatasetSequences(
-    #     t1_list[:4],
-    #     t2_list[:4],
-    #     seg_list[:4],
-    #     (256, 256),
-    #     clicks={"num": 3, "dst": 10},
-    #     cuts={
-    #         "num": 32,
-    #         "size": 32,
-    #     },
-    #     seed=690,
-    #     random=False,
-    #     include_unchanged=True,
-    #     augment=True,
-    # )
-    # faked_cuts, cuts = data[0]
-    # print(cuts[0].shape)
-    # print(len(data[0]), len(data[0][0]), len(data[0][1]), data[0][0][0].shape)
     
     data = CorrectionMRIDatasetSequences(
         t1_list[:4],
@@ -559,23 +540,3 @@ if __name__ == "__main__":
     faked_cuts, cuts = data[0]
     print(cuts[0].shape)
     print(len(data[0]), len(data[0][0]), len(data[0][1]), data[0][0][0].shape)
-
-    # default_shape = torch.Size([3, 16, 40, 40])
-    # i, j = 0, 0
-    # for x, y in data:
-    #     for xx, yy in zip(x, y):
-    #         # print(f'i:{i}, j:{j}, xx:{xx.shape}, yy:{yy.shape}')
-    #         if xx.shape != default_shape or yy.shape != default_shape:
-    #             print(f'i:{i}, j:{j}, xx:{xx.shape}, yy:{yy.shape}')
-    #         j += 1
-    #     i += 1
-    #     j = 0
-
-
-    # dataloader = CorrectionDataLoader(data, batch_size=4)
-    # total = len(dataloader)
-    # print(total)
-    # for i, (x, y) in enumerate(dataloader):
-    #     print(f"{i+1}/{total}, {x.shape}, {y.shape}")
-    #     # print(x.shape, y.shape)
-    #     # break

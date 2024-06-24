@@ -13,9 +13,7 @@ def _get_glioma_indices(mask: torch.Tensor) -> tuple[int, int]:
     Returns:
         tuple of ints: the first and last indices of the glioma
     """
-
-    # first = torch.nonzero((mask == 1))[:, 0][0].item()
-    # last = torch.nonzero((mask == 1))[:, 0][-1].item()
+    
     glioma_indices = torch.nonzero((mask == 1))[:, 0]
     if len(glioma_indices) == 0:
         return 0, 0

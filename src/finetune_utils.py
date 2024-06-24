@@ -43,9 +43,6 @@ def get_clicks(mask: torch.Tensor, pred: torch.Tensor, clicks_num=2, clicks_dst=
         dst = scipy.ndimage.distance_transform_edt(1 - pred)
     else:
         dst = scipy.ndimage.distance_transform_edt(pred)
-        # dst = 1 - dst
-        # dst[dst == 1] = 0
-        # dst[dst != 0] -= np.min(dst)
     weighted_border = dst * border 
     
     if weighted_border.max() == 0.0:
@@ -90,8 +87,6 @@ def cut_volume(seg: torch.Tensor, cut_size=32, num: int = np.inf) -> list[torch.
             coords[2] - cut_size : coords[2] + cut_size,
         ].unsqueeze(0)
 
-        # print(cut.shape, coords)
-        
         cuts.append(cut)
 
     return cuts

@@ -1,19 +1,41 @@
-# Correcting segmentations based on user clicks
-Method for segmentation of Vestibular Schwannomas from brain MRI scans. The method utilises an auxilary correction network, which based on user-defined clicks, refines the generated initial segmentation. 
+# Method for Segmentation of Vestibular Schwannomas from Brain MRI Scans
+The main idea behind this work was to train the primary segmentation network on the least amount of fully annotated images possible and then correct the imperfect segmentations by using user-defined clicks.
 
-<!-- <img src="./docs/imgs/full_pipeline.png" alt="diagram" style="width:80%"/> -->
-<!-- ![diagram](./docs/imgs/full_pipeline.png)
+<!--
+ <p align="center">
+  <img src="./docs/imgs/full_pipeline.png" alt="diagram" style="width:60%;"/>
+  <br/>
+  <i>method diagram</i>
+</p>
+-->
 
-*method diagram*
+The correction is based on an auxiliary correction network, which refines the initial (imperfect) segmentations based on the provided clicks. In general, the refinement is done on a local level, where the clicks denote an area of the initial segmentations that need to be corrected. 
+
+<!--
+The architecture of the correction network is based on a U-Net architecture with separate encoders.
+
+ <p align="center">
+  <img src="./docs/imgs/updated_multimodal_v2.png" alt="diagram" style="width:60%;"/>
+  <br/>
+  <i>architecture of the correction network</i>
+</p>
+-->
+
+We also designed a custom loss function. The loss fuction is based on the Dice loss but adds an additional weighting factor which gives higher weights to the areas denoted by the clicks.
 
 $$
 L_{corr} = 1 - 2 \frac{\sum_{i=1}^{W} \sum_{j=1}^{H} (p_{i,j} \cdot y_{i,j} \cdot w_{i,j})}{\sum_{i=1}^{W} \sum_{j=1}^{H} ((p_{i,j} + y_{i,j}) \cdot w_{i,j})}
-$$ -->
+$$
 
-<!-- <img src="./docs/imgs/reconstructed_seg.png" alt="example" style="width:80%"/> -->
-![example](./docs/imgs/reconstructed_seg.png)
+<p align="center"><i>Correction loss</i></p>
 
-*sample results*
+With this method, we were able to achieve mean dice score of 0.863 on the testing set by utilising only 20% of the fully-annotated samples. In contrast, state-of-the-art fully supervised approaches achieve a Dice score of around 0.920.
+
+<p align="center">
+  <img src="./docs/imgs/reconstructed_seg.png" alt="example" style="width:60%;"/>
+  <br/>
+  <i>sample results</i>
+</p>
 
 ## Setup
 The training and evaluation scripts were built for the Azure ML services, so the workflow outside the Azure services might feel a little sluggish and was not properly tested. 

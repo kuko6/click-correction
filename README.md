@@ -23,8 +23,9 @@ The architecture of the correction network is based on a U-Net architecture with
 
 We also designed a custom loss function. The loss fuction is based on the Dice loss but adds an additional weighting factor which gives higher weights to the areas denoted by the clicks.
 
+<!-- the \limits is a workaround, since github doesnt display the sums properly :/-->
 $$
-L_{corr} = 1 - 2 \frac{\sum_{i=1}^{W} \sum_{j=1}^{H} (p_{i,j} \cdot y_{i,j} \cdot w_{i,j})}{\sum_{i=1}^{W} \sum_{j=1}^{H} ((p_{i,j} + y_{i,j}) \cdot w_{i,j})}
+L_{corr} = 1 - 2 \frac{\sum\limits_{i=1}^{W} \sum\limits_{j=1}^{H} (p_{i,j} \cdot y_{i,j} \cdot w_{i,j})}{\sum\limits_{i=1}^{W} \sum\limits_{j=1}^{H} ((p_{i,j} + y_{i,j}) \cdot w_{i,j})}
 $$
 
 <p align="center"><i>Correction loss</i></p>

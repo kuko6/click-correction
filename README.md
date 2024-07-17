@@ -1,25 +1,27 @@
 # Method for Segmentation of Vestibular Schwannomas from Brain MRI Scans
-The main idea behind this work was to train the primary segmentation network on the least amount of fully annotated images possible and then correct the imperfect segmentations by using user-defined clicks.
+<!-- The main idea behind this work was to train the primary segmentation network on the least amount of fully annotated images possible and then correct the imperfect segmentations by using user-defined clicks.
 
-<!--
+The main idea behind this work was to use as little fully annotated images as possible to train the primary segmentation network and then utilise user-defined clicks to correct imperfect segmentations. -->
+
+The main idea behind this work was to develop a segmentation method which would require as little fully annotated images as possible for training and then utilise user-defined clicks to correct imperfect segmentations.
+
  <p align="center">
-  <img src="./docs/imgs/full_pipeline.png" alt="diagram" style="width:60%;"/>
+  <img src="./docs/imgs/correction_pipeline.png" alt="diagram" style="width:60%;"/>
   <br/>
-  <i>method diagram</i>
+  <i>correction method diagram</i>
 </p>
--->
 
-The correction is based on an auxiliary correction network, which refines the initial (imperfect) segmentations based on the provided clicks. In general, the refinement is done on a local level, where the clicks denote an area of the initial segmentations that need to be corrected. 
 
-<!--
-The architecture of the correction network is based on a U-Net architecture with separate encoders.
+The correction is based on an auxiliary correction network, which refines the initial (imperfect) segmentations based on the provided clicks. In general, the correction is done on a local level, where the clicks denote areas of the initial segmentations that need to be refined. 
+
+The architecture of the correction network is based on the U-Net architecture with separate encoders for each of the different modalities (cuts from the binary segmentation masks and from the MRI sequences).
 
  <p align="center">
   <img src="./docs/imgs/updated_multimodal_v2.png" alt="diagram" style="width:60%;"/>
   <br/>
   <i>architecture of the correction network</i>
 </p>
--->
+
 
 We also designed a custom loss function. The loss fuction is based on the Dice loss but adds an additional weighting factor which gives higher weights to the areas denoted by the clicks.
 

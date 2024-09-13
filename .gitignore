@@ -6,8 +6,8 @@ __pycache__/
 
 outputs/
 training_outputs/
-
 wandb/
 # models/
+docs/thesis.pdf
 
 config*.json

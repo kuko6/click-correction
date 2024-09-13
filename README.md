@@ -32,7 +32,7 @@ $$
 
 <p align="center"><i>Correction loss</i></p>
 
-With this method, we were able to achieve mean dice score of 0.863 on the testing set by utilising only 20% of the fully-annotated samples. In contrast, state-of-the-art fully supervised approaches achieve dice score around 0.920.
+With this method, we were able to achieve mean dice score of 0.883 on the testing set by utilising only 20% of the fully-annotated samples. In contrast, state-of-the-art fully supervised approaches achieve dice score around 0.920.
 
 <p align="center">
   <img src="./docs/imgs/reconstructed_seg.png" alt="example" style="width:60%;"/>

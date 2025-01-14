@@ -132,7 +132,6 @@ def generate_clicks(mask: torch.Tensor, fg=False, bg=False, border=False, clicks
 
     if border:
         return torch.as_tensor(border_clicks)
-        # return torch.as_tensor(border_clicks).unsqueeze(0)
     return torch.stack((torch.as_tensor(bg_clicks), torch.as_tensor(fg_clicks)), axis=0)
 
 

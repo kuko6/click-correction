@@ -1,9 +1,10 @@
+import numpy as np
+import scipy
 import torch
 from torch import nn
-import scipy
-import numpy as np
 
 from losses.dice import dice_coefficient
+
 
 def _get_weight_map(dims: tuple[int], min_thresh=9, max_thresh=20, inverted=False) -> torch.Tensor:
     """

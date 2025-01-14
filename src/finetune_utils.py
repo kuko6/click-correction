@@ -1,7 +1,8 @@
-import torch
 import cv2
-import scipy
 import numpy as np
+import scipy
+import torch
+
 from data.utils import _select_points
 
 

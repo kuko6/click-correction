@@ -1,6 +1,6 @@
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
 
 def dice_coefficient(y_pred: torch.Tensor, y_true: torch.Tensor, eps=1e-6) -> torch.Tensor:

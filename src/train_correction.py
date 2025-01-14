@@ -1,20 +1,35 @@
 import argparse
-import os
 import glob
-import wandb
-# import json
+import os
 
-from sklearn.model_selection import train_test_split
 import numpy as np
 import torch
+import wandb
+
+# import json
+from sklearn.model_selection import train_test_split
 from torchinfo import summary
 
-from model.correction import CorrectionUnet, MultiModalCorrectionUnet, MultiModal3BlockCorrectionUnet
-from data.correction_generator import CorrectionDataLoader, CorrectionMRIDataset, CorrectionMRIDatasetSequences
-from utils import EarlyStopper, make_output_dirs, preview_cuts, record_used_files, save_history
-from losses.dice import dice_coefficient, DiceLoss
+from data.correction_generator import (
+    CorrectionDataLoader,
+    CorrectionMRIDataset,
+    CorrectionMRIDatasetSequences,
+)
 from losses.correction import CorrectionLoss, VolumetricCorrectionLoss
+from losses.dice import DiceLoss, dice_coefficient
+from model.correction import (
+    CorrectionUnet,
+    MultiModal3BlockCorrectionUnet,
+    MultiModalCorrectionUnet,
+)
 from options import TrainCorrectionOptions
+from utils import (
+    EarlyStopper,
+    make_output_dirs,
+    preview_cuts,
+    record_used_files,
+    save_history,
+)
 
 opt = TrainCorrectionOptions()
 config = opt.config
@@ -123,8 +138,6 @@ def val(dataloader: CorrectionDataLoader, model: CorrectionUnet, loss_fn: torch.
 
             # Compute loss and dice coefficient
             if config["use_seq"]:
-                # y = y[:,0].unsqueeze(1)
-                # y = y[:,0].unsqueeze(1)
                 y = y[:,0].unsqueeze(1)
 
             loss = loss_fn(y_pred, y)
@@ -160,13 +173,9 @@ def train_one_epoch(dataloader: CorrectionDataLoader, model: CorrectionUnet, los
         # Compute loss and dice coefficient
         if config["use_seq"]:
             y = y[:,0].unsqueeze(1)
-            # y = y[:,0]
-            # y = y[:,0]
             
         loss = loss_fn(y_pred, y)
         dice = dice_coefficient(y_pred, y)
-        # print(loss.shape)
-        # print(dice.shape)
 
         avg_loss += loss.item()
         avg_dice += dice.item()
@@ -388,11 +397,6 @@ def main():
             device=device,
             inverted=True,
         ),
-        # "volumetricCorrection": VolumetricCorrectionLoss(
-        #     dims=(1, config["cuts"]["cut_depth"]*2, config["cuts"]["size"], config["cuts"]["size"]),
-        #     device=device,
-        #     inverted=True,
-        # )
     }
 
     loss_fn = loss_functions[config["loss"]]

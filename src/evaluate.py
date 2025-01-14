@@ -1,18 +1,22 @@
 import argparse
-import os
 import glob
+import os
+
 import torch
 from torchinfo import summary
 
-from model.segmentation import Unet
-from model.correction import CorrectionUnet, MultiModalCorrectionUnet, MultiModal3BlockCorrectionUnet
 from data.data_generator import MRIDataset
-from utils import make_output_dirs
-from losses.dice import dice_coefficient, DiceLoss
+from finetune_utils import cut_volume, generate_cuts, simulate_clicks
 from losses.correction import CorrectionLoss
+from losses.dice import DiceLoss, dice_coefficient
+from model.correction import (
+    CorrectionUnet,
+    MultiModal3BlockCorrectionUnet,
+    MultiModalCorrectionUnet,
+)
+from model.segmentation import Unet
 from options import TestCorrectionOptions
-
-from finetune_utils import simulate_clicks, generate_cuts, cut_volume
+from utils import make_output_dirs
 
 opt = TestCorrectionOptions()
 config = opt.config
@@ -41,7 +45,6 @@ def prepare_cuts(segmentation_model, data, cut_size):
                     true_seg_cut
                 ))
     
-    # print(len(prepared_cuts))
     return prepared_cuts
 
 
@@ -191,8 +194,6 @@ def main():
                 use_dropout=config["use_dropout"]
             )
 
-    # model = MultiModalCorrectionUnet(in_channels=[1, 2], out_channels=1, blocks=3, encoders=2, block_channels=[32, 64, 128, 256], use_dropout=True).to(device)
-    
     # Initialize optimizer
     model.to(device)
 

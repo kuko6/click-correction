@@ -1,17 +1,15 @@
 import copy
-import nibabel as nib
 import glob
 import os
-import cv2
-import numpy as np
 
+import cv2
+import nibabel as nib
+import numpy as np
 import torch
-from torch.utils.data import Dataset
 import torchvision.transforms.functional as TF
+from torch.utils.data import Dataset
 
 from .utils import generate_clicks
-# from utils import generate_clicks
-
 
 def _augment(cut: torch.Tensor) -> torch.Tensor:
     """ 
@@ -22,8 +20,6 @@ def _augment(cut: torch.Tensor) -> torch.Tensor:
     Returns:
         tensor: augmented cut
     """
-
-    # print(cut.shape)
 
     rng = np.random.default_rng()
     pp = rng.uniform(low=0.0, high=1.0)
@@ -53,7 +49,6 @@ def _cut_volume(volume: torch.Tensor, coords: list[int], cut_size: int) -> torch
         tensor: generated cut in shape (cut_size, cut_size)
     """
 
-    # print(coords, volume.shape)
     if len(volume.shape) == 4:
         cut = torch.clone(volume[:,coords[0]])
         cut = cut[
@@ -67,7 +62,6 @@ def _cut_volume(volume: torch.Tensor, coords: list[int], cut_size: int) -> torch
             coords[1] - cut_size : coords[1] + cut_size,
             coords[2] - cut_size : coords[2] + cut_size,
         ]
-    # print(cut.shape)
     
     return cut
 
@@ -85,8 +79,6 @@ def _3dcut_volume(volume: torch.Tensor, coords: list[int], cut_size: int, cut_de
         tensor: generated cut in shape (cut_size, cut_size)
     """
 
-    # cut = torch.clone(volume[coords[0]])
-    # print(coords, volume.shape)
     cut = torch.clone(volume)
     cut = cut[
         :,
@@ -94,7 +86,6 @@ def _3dcut_volume(volume: torch.Tensor, coords: list[int], cut_size: int, cut_de
         coords[1] - cut_size : coords[1] + cut_size,
         coords[2] - cut_size : coords[2] + cut_size,
     ]
-    # print(volume.shape, cut.shape, coords,  coords[0] - cut_depth, coords[0] + cut_depth)
 
     return cut
 
@@ -145,14 +136,9 @@ def _cut_volumes(
             cut = cut_fn(volume, coords, cut_size, cut_depth)
         else:
             cut = cut_fn(volume, coords, cut_size)
-        # cut = cut_fn(volume, coords, cut_size).unsqueeze(0)
-        # cut = cut_fn(volume, coords, cut_size).unsqueeze(0)
         
         if len(cut.shape) == 2:
             cut = cut.unsqueeze(0)
-
-        # if augment:
-        #     cut = _augment(cut)
 
         cuts.append(cut)
 
@@ -337,7 +323,6 @@ class CorrectionMRIDataset(Dataset):
             clicks_dst=self.clicks.get("dst") or 4,
             seed=self.seed
         )
-        # seg = torch.stack((seg, clicks))
 
         cuts = _cut_volumes(
             volume=seg,
@@ -440,7 +425,6 @@ class CorrectionMRIDatasetSequences(Dataset):
             clicks_dst=self.clicks.get("dst") or 4,
             seed=self.seed
         )
-        # seg = torch.stack((seg, clicks))
 
         cuts = _cut_volumes(
             volume=torch.stack((seg,t1,t2)),
@@ -481,7 +465,6 @@ class CorrectionDataLoader:
             else:
                 data_length += len(data[0])//self.batch_size
         return data_length
-        # return len(self.dataset)
 
     def __iter__(self):
         # Iterate over the dataset

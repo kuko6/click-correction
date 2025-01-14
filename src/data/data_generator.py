@@ -1,14 +1,14 @@
-import nibabel as nib
 import glob
 import os
 
+import nibabel as nib
 import torch
-from torch.utils.data import Dataset
 import torch.nn.functional as F
 import torchvision.transforms.functional as TF
+from torch.utils.data import Dataset
 
 from .utils import generate_clicks, get_new_depth
-# from utils import generate_clicks, get_new_depth
+
 
 # private function
 def _min_max_normalise(image: torch.Tensor) -> torch.Tensor:
@@ -50,10 +50,6 @@ class MRIDataset(Dataset):
 
     def _normalise(self, volume: torch.Tensor) -> torch.Tensor:
         """Normalise given volume."""
-        # mean = torch.mean(volume, dim=(0, 1, 2), keepdim=True)
-        # sd = torch.std(volume, dim=(0, 1, 2), keepdim=True)
-        # return (volume - mean) / sd
-        # return irm_min_max_preprocess(volume)
 
         return _min_max_normalise(volume)
 
@@ -118,8 +114,6 @@ class MRIDataset(Dataset):
                 seed=self.seed
             )
 
-            # seg = seg.unsqueeze(0)
-            # return stacked, clicks, seg
             seg = torch.stack((seg, clicks))
             return stacked, seg
 

@@ -1,22 +1,29 @@
 import argparse
-import os
 import glob
-import wandb
-# import json
+import os
 
-from sklearn.model_selection import train_test_split
 import numpy as np
 import torch
+import wandb
+
+# import json
+from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 from torchinfo import summary
 
-from model.segmentation import Unet
 from data.data_generator import MRIDataset
-from utils import EarlyStopper, make_output_dirs, preview, record_used_files, save_history
-from losses.dice import dice_coefficient, DiceLoss, DiceBCELoss
-from losses.focal_tversky import FocalTverskyLoss, FocalLoss, TverskyLoss
 from losses.clicks import DistanceLoss, DistanceLoss2
+from losses.dice import DiceBCELoss, DiceLoss, dice_coefficient
+from losses.focal_tversky import FocalLoss, FocalTverskyLoss, TverskyLoss
+from model.segmentation import Unet
 from options import TrainOptions
+from utils import (
+    EarlyStopper,
+    make_output_dirs,
+    preview,
+    record_used_files,
+    save_history,
+)
 
 opt = TrainOptions()
 config = opt.config
@@ -38,9 +45,6 @@ def prepare_data(data_dir: str) -> tuple[DataLoader, DataLoader]:
     t1_val.append(t1_train.pop(-1))
     t2_val.append(t2_train.pop(-1))
     seg_val.append(seg_train.pop(-1))
-
-    # if config['clicks']['use']:
-    #     preview_clicks(t1_list, t2_list, seg_list, config['clicks'])
 
     if config["training"] == "clicks":
         t1_train = t1_train[config["train_size"]:]
@@ -66,8 +70,6 @@ def prepare_data(data_dir: str) -> tuple[DataLoader, DataLoader]:
         t1_val, t2_val, seg_val, config["img_dims"], clicks=config["clicks"]
     )
     print(len(train_data), len(val_data))
-    # print(len(t1_train), len(t2_train), len(seg_train))
-    # print(len(t1_val), len(t2_val), len(seg_val))
 
     train_dataloader = DataLoader(train_data, batch_size=config["batch_size"], shuffle=True)
     val_dataloader = DataLoader(val_data, batch_size=config["batch_size"], shuffle=False)
@@ -106,7 +108,6 @@ def val(dataloader: DataLoader, model: Unet, loss_fn: torch.nn.Module, epoch: in
             print(f"validation step: {i+1}/{len(dataloader)}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
 
             if i == 0:
-                # preview(y_pred[0], y[0], dice_coefficient(y_pred, y), epoch)
                 preview(y_pred[0], y[0], dice.item(), output_path=f"outputs/images/{epoch}_preview.png")
 
     avg_loss /= len(dataloader)

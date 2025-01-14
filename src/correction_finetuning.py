@@ -1,24 +1,31 @@
 import argparse
-import os
 import glob
-import wandb
-# import json
+import os
 
-from sklearn.model_selection import train_test_split
 import numpy as np
 import torch
+import wandb
+from sklearn.model_selection import train_test_split
 from torchinfo import summary
 
-from model.segmentation import Unet
-from model.correction import CorrectionUnet, MultiModalCorrectionUnet, MultiModal3BlockCorrectionUnet
-# from data.correction_generator import CorrectionDataLoader, CorrectionMRIDataset, CorrectionMRIDatasetSequences
 from data.data_generator import MRIDataset
-from utils import EarlyStopper, make_output_dirs, preview_cuts, record_used_files, save_history
-from losses.dice import dice_coefficient, DiceLoss
+from finetune_utils import cut_volume, generate_cuts, simulate_clicks
 from losses.correction import CorrectionLoss
+from losses.dice import DiceLoss, dice_coefficient
+from model.correction import (
+    CorrectionUnet,
+    MultiModal3BlockCorrectionUnet,
+    MultiModalCorrectionUnet,
+)
+from model.segmentation import Unet
 from options import FineTunningCorrectionOptions
-
-from finetune_utils import simulate_clicks, generate_cuts, cut_volume
+from utils import (
+    EarlyStopper,
+    make_output_dirs,
+    preview_cuts,
+    record_used_files,
+    save_history,
+)
 
 opt = FineTunningCorrectionOptions()
 config = opt.config
@@ -41,16 +48,13 @@ def prepare_cuts(segmentation_model, data, cut_size):
             )
 
             true_seg_cuts = cut_volume(torch.stack((y[0], new_clicks[0])), cut_size=cut_size)
-            # print(len(seg_cuts), len(t1_cuts), len(t2_cuts), len(true_seg_cuts))
 
             for seg_cut, t1_cut, t2_cut, true_seg_cut in zip(seg_cuts, t1_cuts, t2_cuts, true_seg_cuts):
-                # training_cuts.append(torch.stack((seg_cut.squeeze(0), t1_cut.squeeze(0), t2_cut.squeeze(0))))
                 prepared_cuts.append((
                     torch.stack((seg_cut.squeeze(0), t1_cut.squeeze(0), t2_cut.squeeze(0))),
                     true_seg_cut
                 ))
     
-    # print(len(prepared_cuts))
     return prepared_cuts
 
 
@@ -80,7 +84,6 @@ def prepare_data(data_dir: str, segmentation_model):
     t2_list = sorted(glob.glob(os.path.join(data_dir, "VS-*-*/vs_*/*_t2_*")))
     seg_list = sorted(glob.glob(os.path.join(data_dir, "VS-*-*/vs_*/*_seg_*")))
 
-    # seg_train, seg_val = train_test_split(seg_list, test_size=0.2, train_size=0.8, random_state=420)
     t1_train, t1_val, t2_train, t2_val, seg_train, seg_val = train_test_split(
         t1_list, t2_list, seg_list, test_size=0.2, train_size=0.8, random_state=420
     )
@@ -109,12 +112,7 @@ def prepare_data(data_dir: str, segmentation_model):
     val_batches = create_batches(validation_cuts, batch_size=config["batch_size"])
 
     print(f"train size: {len(training_cuts)}, train batches: {len(train_batches)}")
-    # for (x, y) in train_batches:
-    #     print(x.shape, y.shape)
-    
     print(f"val size: {len(validation_cuts)}, val batches: {len(val_batches)}")
-    # for (x, y) in val_batches:
-    #     print(x.shape, y.shape)
 
     if config["use_seq"]:
         record_used_files(
@@ -171,8 +169,6 @@ def train_one_epoch(data, model, loss_fn: torch.nn.Module, optimizer, epoch) -> 
         # Compute loss and dice coefficient
         loss = loss_fn(y_pred, y)
         dice = dice_coefficient(y_pred, y)
-        # print(loss.shape)
-        # print(dice.shape)
 
         avg_loss += loss.item()
         avg_dice += dice.item()
@@ -359,8 +355,6 @@ def main():
                 use_dropout=config["use_dropout"]
             )
 
-    # model = MultiModalCorrectionUnet(in_channels=[1, 2], out_channels=1, blocks=3, encoders=2, block_channels=[32, 64, 128, 256], use_dropout=True).to(device)
-    
     # Initialize optimizer
     optimizer = torch.optim.Adam(model.parameters(), lr=config["lr"])
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, factor=0.5)

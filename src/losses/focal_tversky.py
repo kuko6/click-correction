@@ -1,6 +1,6 @@
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
 
 def tversky_index(y_pred: torch.Tensor, y_true: torch.Tensor, epsilon=1e-6, alpha=0.5, beta=0.5):

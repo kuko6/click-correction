@@ -1,12 +1,13 @@
-# import cv2
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
 import json
 import os
-from losses.dice import dice_coefficient
 import re
-# from .losses.dice import dice_coefficient
+
+import matplotlib.pyplot as plt
+import numpy as np
+import torch
+
+from losses.dice import dice_coefficient
+
 
 # https://stackoverflow.com/a/73704579
 class EarlyStopper:
@@ -56,8 +57,6 @@ def get_glioma_indices(mask: torch.Tensor) -> tuple[int, int]:
     """
 
     glioma_indices = torch.nonzero((mask > 0))[:, 1]
-    # first = torch.nonzero((mask > 0))[:,1][0].item()
-    # last = torch.nonzero((mask > 0))[:,1][-1].item()
     if len(glioma_indices) == 0:
         return 0, 0
 

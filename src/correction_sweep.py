@@ -1,20 +1,31 @@
 import argparse
-import os
 import glob
-import wandb
-# import json
+import os
 
-from sklearn.model_selection import train_test_split
 import numpy as np
 import torch
+import wandb
+
+# import json
+from sklearn.model_selection import train_test_split
 from torchinfo import summary
 
-from model.correction import CorrectionUnet
-from data.correction_generator import CorrectionDataLoader, CorrectionMRIDataset, CorrectionMRIDatasetSequences
-from utils import EarlyStopper, make_output_dirs, preview_cuts, record_used_files, save_history
-from losses.dice import dice_coefficient, DiceLoss
+from data.correction_generator import (
+    CorrectionDataLoader,
+    CorrectionMRIDataset,
+    CorrectionMRIDatasetSequences,
+)
 from losses.correction import CorrectionLoss
+from losses.dice import DiceLoss, dice_coefficient
+from model.correction import CorrectionUnet
 from options import TrainCorrectionSweepOptions
+from utils import (
+    EarlyStopper,
+    make_output_dirs,
+    preview_cuts,
+    record_used_files,
+    save_history,
+)
 
 opt = TrainCorrectionSweepOptions()
 config = opt.config
@@ -89,21 +100,6 @@ def prepare_data(data_dir: str) -> tuple[CorrectionDataLoader, CorrectionDataLoa
     val_dataloader = CorrectionDataLoader(val_data, batch_size=config["batch_size"])
     print(f"~{len(train_dataloader)*2}, ~{len(val_dataloader)*2}")
 
-    # if config["use_seq"]:
-    #     record_used_files(
-    #         path=f"outputs/{opt.name}", 
-    #         labels=["t1", "t2", "seg"], 
-    #         train_files=list(zip(t1_train[:config["train_size"]], t2_train[:config["train_size"]], seg_train[:config["train_size"]])),
-    #         val_files=list(zip(t1_val[:config["val_size"]], t2_val[:config["val_size"]], seg_val[:config["val_size"]]))
-    #     )
-    # else:
-    #     record_used_files(
-    #         path=f"outputs/{opt.name}", 
-    #         labels=("seg"), 
-    #         train_files=seg_train[:config["train_size"]],
-    #         val_files=seg_val[:config["val_size"]]
-    #     )
-
     return train_dataloader, val_dataloader
 
 
@@ -130,9 +126,6 @@ def val(dataloader: CorrectionDataLoader, model: CorrectionUnet, loss_fn: torch.
             avg_dice += dice.item()
 
             print(f"validation step: {i+1}/{dataloader_size}, loss: {loss.item():>5f}, dice: {dice.item():>5f}", end="\r")
-
-            # if i==0:
-            #     preview_cuts(y_pred, x, y, dice.item(), output_path=f"outputs/images/{epoch}_preview.png")
 
     avg_loss /= dataloader_size
     avg_dice /= dataloader_size
@@ -161,8 +154,6 @@ def train_one_epoch(dataloader: CorrectionDataLoader, model: CorrectionUnet, los
             
         loss = loss_fn(y_pred, y)
         dice = dice_coefficient(y_pred, y)
-        # print(loss.shape)
-        # print(dice.shape)
 
         avg_loss += loss.item()
         avg_dice += dice.item()
@@ -332,13 +323,11 @@ def main():
     parser.add_argument("--wandb-key", type=str, help="wandb id")
     parser.add_argument("--name", type=str, help="name of the experiment")
     args = parser.parse_args()
-    # print(args.wandb)
 
     if not args.data_path:
         print("You need to specify datapath!!!! >:(")
         return
 
-    # wandb_key = args.wandb_key
     global opt
     if args.use_wandb is not None or args.wandb_key is not None:
         opt.use_wandb = True
@@ -346,8 +335,6 @@ def main():
     if args.name is not None:
         opt.name = args.name
 
-    # print(os.listdir(data_dir))
-    
     sweep_config = {
         "method": "random",
         "name": opt.name,
@@ -361,9 +348,6 @@ def main():
     sweep_id = wandb.sweep(sweep=sweep_config, entity="kuko", project="DP-sweep")
     print(sweep_id)
     wandb.agent(sweep_id, start_training)
-
-
-    # make_output_dirs(["outputs", f"outputs/{opt.name}", "outputs/images"])
 
 
 if __name__ == "__main__":

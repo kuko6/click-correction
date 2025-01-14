@@ -1,9 +1,10 @@
-import torch
-from torch import nn
 import scipy
-# from losses.dice import dice_coefficient
-from utils import get_glioma_indices
+import torch
 from kornia.contrib import distance_transform as kornia_dst
+from torch import nn
+
+from utils import get_glioma_indices
+
 
 class DistanceLoss(nn.Module):
     def __init__(self, thresh_val: None | int, thresh_mode='max', probs=True, preds_threshold=0.7):
@@ -67,12 +68,6 @@ class DistanceLoss(nn.Module):
         # loss = overlap + (self.alpha * distance_loss)
         loss = distance_loss
     
-        # print(distance_loss.item(), overlap.item())
-        # print(torch.mean(combined[a]))
-        # print(distance_loss.item(), dice_loss.item())
-        # loss = combined[a] / len(a)
-        # print(distance_loss.grad_fn)
-
         return loss
     
 

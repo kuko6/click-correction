@@ -6,17 +6,17 @@ The main idea behind this work was to develop a segmentation method which would 
  <p align="center">
   <img src="./docs/imgs/correction_pipeline.png" alt="diagram" style="width:60%;"/>
   <br/>
-  <i>correction method diagram</i>
+  <i>Correction method diagram</i>
 </p>
 
-The correction is based on an auxiliary correction network, which refines the initial (imperfect) segmentations based on the provided clicks. In general, the correction is done on a local level, where the clicks denote areas of the initial segmentations that need to be refined. 
+The correction is based on an auxiliary correction network, which refines the initial (imperfect) segmentations based on the provided clicks. In general, the correction is done on a local level, where the clicks denote areas of the initial segmentations that need to be improved. 
 
 The architecture of the correction network is based on the U-Net architecture with separate encoders for each of the different modalities (cuts from the binary segmentation masks and from the MRI sequences).
 
  <p align="center">
   <img src="./docs/imgs/updated_multimodal_v2.png" alt="diagram" style="width:60%;"/>
   <br/>
-  <i>architecture of the correction network</i>
+  <i>Architecture of the correction network</i>
 </p>
 
 We also designed a custom loss function. The loss fuction is based on the Dice loss but adds an additional weighting factor which gives higher weights to the areas denoted by the clicks.
@@ -32,7 +32,7 @@ With this method, we were able to achieve mean dice score of 0.883 on the testin
 <p align="center">
   <img src="./docs/imgs/reconstructed_seg.png" alt="example" style="width:60%;"/>
   <br/>
-  <i>sample results</i>
+  <i>Sample results</i>
 </p>
 
 ## Setup
